@@ -1,0 +1,403 @@
+/* ── Admin panel ────────────────────────────────────────────────────────── */
+
+.admin-wrap {
+  display: flex;
+  min-height: 100vh;
+  background: #f7f7f5;
+  font-family: var(--font-sans);
+  color: var(--ink);
+}
+
+/* ── Sidebar ── */
+.admin-sidebar {
+  width: 180px;
+  min-width: 180px;
+  background: #fff;
+  border-right: 1px solid rgba(27,26,23,.1);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.admin-sidebar-top {
+  padding: 1.25rem 1rem 1rem;
+  border-bottom: 1px solid rgba(27,26,23,.08);
+}
+
+/* Stacked logo: mark tile above wordmark — no horizontal overflow */
+.admin-sidebar-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .4rem;
+}
+
+.admin-sidebar-wordmark {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: .18em;
+  color: var(--ink);
+  line-height: 1;
+}
+
+.admin-brand-badge {
+  display: inline-block;
+  margin-top: .5rem;
+  padding: .18rem .55rem;
+  background: var(--ink);
+  color: #f4f1ea;
+  font-size: .6rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  border-radius: 3px;
+}
+
+.admin-nav-divider {
+  margin: .75rem 1rem;
+  border-bottom: 1px solid rgba(27,26,23,.08);
+}
+
+.admin-nav-back {
+  font-size: .78rem;
+  color: var(--gold-dark);
+  opacity: .8 !important;
+}
+
+.admin-nav-back:hover {
+  opacity: 1 !important;
+}
+
+.admin-nav {
+  flex: 1;
+  padding: 1.25rem 0;
+}
+
+.admin-nav-label {
+  font-size: .6rem;
+  text-transform: uppercase;
+  letter-spacing: .14em;
+  opacity: .4;
+  padding: 0 1rem;
+  margin-bottom: .6rem;
+}
+
+.admin-nav-link {
+  display: block;
+  padding: .55rem 1rem;
+  font-size: .83rem;
+  color: var(--ink);
+  text-decoration: none;
+  opacity: .55;
+  border-left: 2px solid transparent;
+  transition: opacity .15s, border-color .15s, background .15s;
+}
+
+.admin-nav-link:hover {
+  opacity: .9;
+  background: rgba(27,26,23,.04);
+}
+
+.admin-nav-link.active {
+  opacity: 1;
+  font-weight: 600;
+  border-left-color: var(--gold);
+  background: rgba(194,161,90,.07);
+}
+
+.admin-sidebar-user {
+  padding: .85rem 1rem;
+  border-top: 1px solid rgba(27,26,23,.08);
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+}
+
+.admin-user-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--gold);
+  color: #fff;
+  font-size: .7rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.admin-user-name {
+  font-size: .8rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.admin-user-role {
+  font-size: .68rem;
+  opacity: .45;
+}
+
+/* ── Main content ── */
+.admin-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.admin-content {
+  flex: 1;
+  padding: 2rem 2.5rem;
+  max-width: 1100px;
+}
+
+.admin-eyebrow {
+  font-size: .65rem;
+  text-transform: uppercase;
+  letter-spacing: .16em;
+  opacity: .4;
+  margin-bottom: .4rem;
+}
+
+.admin-page-title {
+  font-family: var(--font-serif);
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid rgba(27,26,23,.1);
+}
+
+/* ── Stat cards ── */
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.75rem;
+}
+
+.admin-stat-card {
+  background: #fff;
+  border: 1px solid rgba(27,26,23,.08);
+  border-radius: 8px;
+  padding: 1.1rem 1.25rem;
+}
+
+.admin-stat-card.green  { background: #f0faf4; border-color: rgba(79,157,105,.2); }
+.admin-stat-card.amber  { background: #fef9ec; border-color: var(--gold); }
+.admin-stat-card.purple { background: #f3f0ff; border-color: rgba(107,79,187,.2); }
+
+.admin-stat-label {
+  font-size: .72rem;
+  opacity: .6;
+  margin-bottom: .5rem;
+  font-weight: 500;
+}
+
+.admin-stat-value {
+  font-family: var(--font-serif);
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: .35rem;
+}
+
+.admin-stat-card.green  .admin-stat-value { color: #2d7a55; }
+.admin-stat-card.amber  .admin-stat-value { color: var(--gold-dark); }
+.admin-stat-card.purple .admin-stat-value { color: #6b4fbb; }
+
+.admin-stat-sub {
+  font-size: .72rem;
+  opacity: .5;
+}
+
+/* ── Two-column grid ── */
+.admin-grid {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.admin-panel {
+  background: #fff;
+  border: 1px solid rgba(27,26,23,.08);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.admin-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 1rem 1.25rem .75rem;
+  border-bottom: 1px solid rgba(27,26,23,.07);
+}
+
+.admin-panel-title {
+  font-size: .68rem;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  font-weight: 600;
+  opacity: .5;
+}
+
+.admin-panel-sub {
+  font-size: .65rem;
+  opacity: .35;
+}
+
+/* ── Audit events ── */
+.audit-list { padding: 0; }
+
+.audit-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: .7rem 1.25rem;
+  border-bottom: 1px solid rgba(27,26,23,.06);
+  gap: 1rem;
+}
+
+.audit-row:last-child { border-bottom: none; }
+
+.audit-left { display: flex; align-items: flex-start; gap: .6rem; min-width: 0; }
+
+.audit-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #bbb;
+  flex-shrink: 0;
+  margin-top: .35rem;
+}
+
+.audit-dot.admin { background: #8b5cf6; }
+
+.audit-actor {
+  font-size: .78rem;
+  font-weight: 600;
+  margin-bottom: .1rem;
+  white-space: nowrap;
+}
+
+.audit-actor.admin-actor { color: #6b4fbb; }
+
+.audit-action {
+  font-size: .75rem;
+  opacity: .6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.audit-time {
+  font-size: .7rem;
+  opacity: .4;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Active auctions ── */
+.auction-list { padding: 0; }
+
+.auction-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: .8rem 1.25rem;
+  border-bottom: 1px solid rgba(27,26,23,.06);
+}
+
+.auction-row:last-child { border-bottom: none; }
+
+.auction-lot {
+  font-size: .62rem;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--gold-dark);
+  margin-bottom: .15rem;
+}
+
+.auction-name {
+  font-size: .83rem;
+  font-weight: 500;
+}
+
+.auction-bid {
+  font-family: var(--font-serif);
+  font-size: .95rem;
+  font-weight: 700;
+  color: var(--gold-dark);
+}
+
+.auction-time {
+  font-size: .75rem;
+  opacity: .55;
+  margin-left: .5rem;
+}
+
+.auction-time.ended {
+  color: var(--gold-dark);
+  opacity: 1;
+  font-weight: 500;
+}
+
+/* ── Alert bar ── */
+.admin-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  background: #fef9ec;
+  border: 1px solid rgba(194,161,90,.35);
+  border-radius: 8px;
+  padding: .9rem 1.25rem;
+}
+
+.admin-alert-left {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+}
+
+.admin-alert-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--gold);
+  flex-shrink: 0;
+}
+
+.admin-alert-text {
+  font-size: .82rem;
+  line-height: 1.5;
+}
+
+.admin-alert-btn {
+  white-space: nowrap;
+  padding: .55rem 1.1rem;
+  background: var(--ink);
+  color: #f4f1ea;
+  border: none;
+  border-radius: 4px;
+  font: inherit;
+  font-size: .78rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.admin-alert-btn:hover { background: #333; }
+
+@media (max-width: 900px) {
+  .admin-stats { grid-template-columns: 1fr 1fr; }
+  .admin-grid  { grid-template-columns: 1fr; }
+  .admin-sidebar { display: none; }
+  .admin-content { padding: 1.5rem; }
+}

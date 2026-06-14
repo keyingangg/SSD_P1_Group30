@@ -1,0 +1,21 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.sqlite3
+
+# Django
+media/
+staticfiles/
+
+# Node / Frontend
+node_modules/
+dist/
+
+# OS
+.DS_Store

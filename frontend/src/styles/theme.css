@@ -1,0 +1,169 @@
+/* ==========================================================================
+   SecureBid — global theme
+   Editorial luxury look: cream canvas, brass accent, serif display + sans UI.
+   ========================================================================== */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;0,700;0,800;1,400;1,500&display=swap");
+
+:root {
+  /* Surfaces */
+  --bg: #f4f1ea; /* cream canvas */
+  --panel: #ece9e2; /* form card */
+  --input-bg: #e1ddd4; /* input fill */
+
+  /* Ink / text */
+  --ink: #1b1a17; /* near-black headings */
+  --ink-soft: #4a4843; /* labels / body */
+  --muted: #8a8780; /* secondary text */
+
+  /* Lines */
+  --line: #d6d2c7; /* hairline borders */
+
+  /* Brand accent */
+  --gold: #c2a15a;
+  --gold-dark: #a6863f;
+
+  /* States */
+  --green: #4f9d69;
+  --danger: #b4452f;
+
+  /* Shape & type */
+  --radius: 8px;
+  --font-serif: "Playfair Display", Georgia, "Times New Roman", serif;
+  --font-sans: "Inter", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-serif);
+  color: var(--ink);
+  margin: 0;
+  font-weight: 700;
+}
+
+a {
+  color: var(--gold-dark);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+hr.rule {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 0;
+}
+
+/* --- Form primitives (shared across all pages) ------------------------- */
+.field {
+  margin-bottom: 18px;
+}
+
+.field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin-bottom: 8px;
+}
+
+.field input[type="email"],
+.field input[type="password"],
+.field input[type="text"] {
+  width: 100%;
+  padding: 13px 14px;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  color: var(--ink);
+  background: var(--input-bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.field input::placeholder {
+  color: var(--muted);
+}
+
+.field input:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(194, 161, 90, 0.18);
+}
+
+/* --- Buttons ----------------------------------------------------------- */
+.btn-gold {
+  width: 100%;
+  padding: 14px 16px;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #fff;
+  background: var(--gold);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-gold:hover {
+  background: var(--gold-dark);
+}
+.btn-gold:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* --- Inline links & helpers -------------------------------------------- */
+.link-gold {
+  color: var(--gold-dark);
+  font-weight: 500;
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold-dark);
+}
+
+.form-error {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--danger);
+  background: rgba(180, 69, 47, 0.08);
+  border: 1px solid rgba(180, 69, 47, 0.25);
+  border-radius: var(--radius);
+}
+
+.form-note {
+  font-size: 12px;
+  color: var(--muted);
+}
