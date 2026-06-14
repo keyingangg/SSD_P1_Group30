@@ -52,8 +52,11 @@ jobs:
 
       - name: Run Django tests
         working-directory: backend
+        shell: bash
         run: |
-          pytest; code=$?
+          set +e
+          pytest --tb=short
+          code=$?
           [ $code -eq 5 ] && exit 0 || exit $code
 
   sast:
