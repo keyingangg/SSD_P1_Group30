@@ -19,7 +19,7 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             set -e
-            cd ~/SSD_P1_Group30
+            cd /var/www/securebid
 
             # Pull the latest code
             git pull origin main
@@ -28,8 +28,8 @@ jobs:
             cd backend
             source venv/bin/activate
             pip install -r requirements.txt
-            python manage.py migrate --settings=securebid.settings.production
-            python manage.py collectstatic --noinput --settings=securebid.settings.production
+            DJANGO_SETTINGS_MODULE=securebid.settings.production python manage.py migrate
+            DJANGO_SETTINGS_MODULE=securebid.settings.production python manage.py collectstatic --noinput
             deactivate
             cd ..
 
@@ -40,5 +40,5 @@ jobs:
             cd ..
 
             # Restart services
-            sudo systemctl restart securebid-daphne
+            sudo systemctl restart securebid
             sudo systemctl restart nginx
