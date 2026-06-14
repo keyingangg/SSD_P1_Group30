@@ -5,7 +5,11 @@ import { useAuth } from "../context/AuthContext.jsx";
 // Guards routes that require authentication. Pass `requireAdmin` to restrict
 // a route to admin users.
 export default function ProtectedRoute({ children, requireAdmin = false }) {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return null;
+  }
 
   if (!user) {
     return <Navigate to="/login" replace />;
