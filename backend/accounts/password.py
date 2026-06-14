@@ -18,7 +18,7 @@ def is_password_breached(password, *, timeout=3):
     False) if the API is unreachable so registration is not blocked by a
     transient network error.
     """
-    sha1 = hashlib.sha1(password.encode("utf-8")).hexdigest().upper()
+    sha1 = hashlib.sha1(password.encode("utf-8")).hexdigest().upper()  # nosec B324 — SHA-1 required by HIBP k-anonymity protocol
     prefix, suffix = sha1[:5], sha1[5:]
 
     try:
@@ -26,7 +26,7 @@ def is_password_breached(password, *, timeout=3):
             HIBP_RANGE_URL.format(prefix=prefix),
             headers={"User-Agent": "SecureBid-PasswordCheck"},
         )
-        with urlopen(request, timeout=timeout) as response:
+        with urlopen(request, timeout=timeout) as response:  # nosec B310 — URL is a hardcoded HTTPS constant, not user input
             body = response.read().decode("utf-8")
     except (URLError, TimeoutError, OSError):
         # Fail open: do not block registration on a network failure.

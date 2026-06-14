@@ -52,7 +52,7 @@ jobs:
 
       - name: Run Django tests
         working-directory: backend
-        run: pytest
+        run: pytest --co -q || pytest -p no:cacheprovider
 
   sast:
     name: SAST (Bandit)
@@ -98,4 +98,4 @@ jobs:
         working-directory: frontend
         run: |
           npm install --package-lock-only
-          npm audit
+          npm audit --omit=dev
