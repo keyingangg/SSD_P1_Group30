@@ -52,7 +52,9 @@ jobs:
 
       - name: Run Django tests
         working-directory: backend
-        run: pytest --co -q || pytest -p no:cacheprovider
+        run: |
+          pytest; code=$?
+          [ $code -eq 5 ] && exit 0 || exit $code
 
   sast:
     name: SAST (Bandit)
