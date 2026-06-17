@@ -1,0 +1,331 @@
+"""Feature tests for the authentication and account management flows."""
+import pytest
+from django.utils import timezone
+from django.contrib.auth import get_user_model
+from django.core import mail
+
+from accounts.tokens import (
+    generate_email_verification_token,
+    generate_password_reset_token,
+    generate_staff_invite_token,
+)
+from accounts.models import EmailVerificationToken, PasswordResetToken
+
+User = get_user_model()
+
+REGISTER_URL = "/api/accounts/register/"
+VERIFY_URL = "/api/accounts/verify-email/"
+LOGIN_URL = "/api/accounts/login/"
+LOGOUT_URL = "/api/accounts/logout/"
+PROFILE_URL = "/api/accounts/profile/"
+PASSWORD_RESET_URL = "/api/accounts/password-reset/"
+PASSWORD_RESET_CONFIRM_URL = "/api/accounts/password-reset/confirm/"
+STAFF_INVITE_URL = "/api/accounts/staff/invite/"
+ACCEPT_INVITE_URL = "/api/accounts/staff/accept-invite/"
+ADMIN_USERS_URL = "/api/accounts/admin/users/"
+
+
+# ---------------------------------------------------------------------------
+# Registration
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_register_new_user_returns_201(client):
+    resp = client.post(REGISTER_URL, {"email": "new@example.com", "password": "StrongPass123!"}, format="json")
+    assert resp.status_code == 201
+    assert not User.objects.get(email="new@example.com").is_active
+
+
+@pytest.mark.django_db
+def test_register_sends_verification_email(client):
+    client.post(REGISTER_URL, {"email": "new@example.com", "password": "StrongPass123!"}, format="json")
+    assert len(mail.outbox) == 1
+    assert "new@example.com" in mail.outbox[0].to
+
+
+@pytest.mark.django_db
+def test_register_duplicate_verified_email_returns_201_no_enumeration(verified_user, client):
+    resp = client.post(REGISTER_URL, {"email": verified_user.email, "password": "StrongPass123!"}, format="json")
+    assert resp.status_code == 201
+    assert len(mail.outbox) == 0
+
+
+@pytest.mark.django_db
+def test_register_duplicate_unverified_resends_link(client):
+    client.post(REGISTER_URL, {"email": "pending@example.com", "password": "StrongPass123!"}, format="json")
+    mail.outbox = []
+    resp = client.post(REGISTER_URL, {"email": "pending@example.com", "password": "StrongPass123!"}, format="json")
+    assert resp.status_code == 201
+    assert len(mail.outbox) == 1
+
+
+@pytest.mark.django_db
+def test_register_missing_fields_returns_400(client):
+    resp = client.post(REGISTER_URL, {"email": "bad@example.com"}, format="json")
+    assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Email verification
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_verify_email_valid_token_activates_account(db):
+    from rest_framework.test import APIClient
+    c = APIClient()
+    user = User.objects.create_user(
+        email="v@example.com", display_name="V", password="StrongPass123!",
+        is_active=False, is_email_verified=False,
+    )
+    raw_token = generate_email_verification_token(user)
+    resp = c.post(VERIFY_URL, {"token": raw_token}, format="json")
+    assert resp.status_code == 200
+    user.refresh_from_db()
+    assert user.is_active
+    assert user.is_email_verified
+
+
+@pytest.mark.django_db
+def test_verify_email_invalid_token_returns_400(client):
+    resp = client.post(VERIFY_URL, {"token": "notarealtoken"}, format="json")
+    assert resp.status_code == 400
+
+
+@pytest.mark.django_db
+def test_verify_email_expired_token_returns_400(db):
+    from rest_framework.test import APIClient
+    c = APIClient()
+    user = User.objects.create_user(
+        email="exp@example.com", display_name="E", password="StrongPass123!",
+        is_active=False, is_email_verified=False,
+    )
+    raw_token = generate_email_verification_token(user)
+    token_record = EmailVerificationToken.objects.get(user=user)
+    token_record.expires_at = timezone.now() - timezone.timedelta(hours=1)
+    token_record.save()
+    resp = c.post(VERIFY_URL, {"token": raw_token}, format="json")
+    assert resp.status_code == 400
+
+
+@pytest.mark.django_db
+def test_verify_email_used_token_returns_400(db):
+    from rest_framework.test import APIClient
+    c = APIClient()
+    user = User.objects.create_user(
+        email="used@example.com", display_name="U", password="StrongPass123!",
+        is_active=False, is_email_verified=False,
+    )
+    raw_token = generate_email_verification_token(user)
+    c.post(VERIFY_URL, {"token": raw_token}, format="json")
+    resp = c.post(VERIFY_URL, {"token": raw_token}, format="json")
+    assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Login / logout
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_login_valid_credentials_returns_200(verified_user, client):
+    resp = client.post(LOGIN_URL, {"email": verified_user.email, "password": "StrongPass123!"}, format="json")
+    assert resp.status_code == 200
+    assert resp.data["email"] == verified_user.email
+
+
+@pytest.mark.django_db
+def test_login_wrong_password_returns_400(verified_user, client):
+    resp = client.post(LOGIN_URL, {"email": verified_user.email, "password": "WrongPass999!"}, format="json")
+    assert resp.status_code == 400
+
+
+@pytest.mark.django_db
+def test_login_unverified_account_returns_400(db, client):
+    User.objects.create_user(
+        email="unverified@example.com", display_name="UV", password="StrongPass123!",
+        is_active=False, is_email_verified=False,
+    )
+    resp = client.post(LOGIN_URL, {"email": "unverified@example.com", "password": "StrongPass123!"}, format="json")
+    assert resp.status_code == 400
+
+
+@pytest.mark.django_db
+def test_login_missing_fields_returns_400(client):
+    resp = client.post(LOGIN_URL, {"email": "x@example.com"}, format="json")
+    assert resp.status_code == 400
+
+
+@pytest.mark.django_db
+def test_logout_authenticated_returns_200(auth_client):
+    resp = auth_client.post(LOGOUT_URL)
+    assert resp.status_code == 200
+
+
+@pytest.mark.django_db
+def test_logout_unauthenticated_returns_403(client):
+    resp = client.post(LOGOUT_URL)
+    assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# User profile
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_profile_authenticated_returns_200(auth_client, verified_user):
+    resp = auth_client.get(PROFILE_URL)
+    assert resp.status_code == 200
+    assert resp.data["email"] == verified_user.email
+
+
+@pytest.mark.django_db
+def test_profile_unauthenticated_returns_403(client):
+    resp = client.get(PROFILE_URL)
+    assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Password reset
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_password_reset_request_existing_user_sends_email(verified_user, client):
+    resp = client.post(PASSWORD_RESET_URL, {"email": verified_user.email}, format="json")
+    assert resp.status_code == 200
+    assert len(mail.outbox) == 1
+
+
+@pytest.mark.django_db
+def test_password_reset_request_nonexistent_user_returns_200_no_email(client):
+    resp = client.post(PASSWORD_RESET_URL, {"email": "nobody@example.com"}, format="json")
+    assert resp.status_code == 200
+    assert len(mail.outbox) == 0
+
+
+@pytest.mark.django_db
+def test_password_reset_confirm_valid_token_updates_password(verified_user, client):
+    raw_token = generate_password_reset_token(verified_user)
+    new_password = "NewStrongPass456!"
+    resp = client.post(PASSWORD_RESET_CONFIRM_URL, {"token": raw_token, "password": new_password}, format="json")
+    assert resp.status_code == 200
+    verified_user.refresh_from_db()
+    assert verified_user.check_password(new_password)
+
+
+@pytest.mark.django_db
+def test_password_reset_confirm_invalid_token_returns_400(client):
+    resp = client.post(PASSWORD_RESET_CONFIRM_URL, {"token": "badtoken", "password": "NewStrongPass456!"}, format="json")
+    assert resp.status_code == 400
+
+
+@pytest.mark.django_db
+def test_password_reset_confirm_expired_token_returns_400(verified_user, client):
+    raw_token = generate_password_reset_token(verified_user)
+    record = PasswordResetToken.objects.get(user=verified_user)
+    record.expires_at = timezone.now() - timezone.timedelta(minutes=1)
+    record.save()
+    resp = client.post(PASSWORD_RESET_CONFIRM_URL, {"token": raw_token, "password": "NewStrongPass456!"}, format="json")
+    assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Staff invite
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_staff_invite_admin_returns_201(admin_client):
+    resp = admin_client.post(STAFF_INVITE_URL, {"email": "newstaff@example.com"}, format="json")
+    assert resp.status_code == 201
+    assert len(mail.outbox) == 1
+
+
+@pytest.mark.django_db
+def test_staff_invite_non_admin_returns_403(auth_client):
+    resp = auth_client.post(STAFF_INVITE_URL, {"email": "newstaff@example.com"}, format="json")
+    assert resp.status_code == 403
+
+
+@pytest.mark.django_db
+def test_staff_invite_unauthenticated_returns_403(client):
+    resp = client.post(STAFF_INVITE_URL, {"email": "newstaff@example.com"}, format="json")
+    assert resp.status_code == 403
+
+
+@pytest.mark.django_db
+def test_staff_invite_duplicate_email_returns_400(admin_client, verified_user):
+    resp = admin_client.post(STAFF_INVITE_URL, {"email": verified_user.email}, format="json")
+    assert resp.status_code == 400
+
+
+@pytest.mark.django_db
+def test_accept_invite_valid_token_activates_staff(admin_user, client):
+    new_staff = User.objects.create_user(
+        email="invited@example.com", display_name="Invited",
+        password=None, is_active=False, is_staff=True, is_email_verified=False,
+    )
+    raw_token = generate_staff_invite_token(new_staff, invited_by=admin_user)
+    resp = client.post(ACCEPT_INVITE_URL, {
+        "token": raw_token,
+        "display_name": "New Staff",
+        "password": "StaffPass789!",
+    }, format="json")
+    assert resp.status_code == 200
+    new_staff.refresh_from_db()
+    assert new_staff.is_active
+    assert new_staff.is_email_verified
+
+
+@pytest.mark.django_db
+def test_accept_invite_invalid_token_returns_400(client):
+    resp = client.post(ACCEPT_INVITE_URL, {
+        "token": "badtoken",
+        "display_name": "Nobody",
+        "password": "StaffPass789!",
+    }, format="json")
+    assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Admin user management
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_admin_user_list_returns_200_for_staff(admin_client):
+    resp = admin_client.get(ADMIN_USERS_URL)
+    assert resp.status_code == 200
+
+
+@pytest.mark.django_db
+def test_admin_user_list_returns_403_for_regular_user(auth_client):
+    resp = auth_client.get(ADMIN_USERS_URL)
+    assert resp.status_code == 403
+
+
+@pytest.mark.django_db
+def test_admin_user_detail_lock_toggles_is_active(admin_client, verified_user):
+    url = f"/api/accounts/admin/users/{verified_user.pk}/"
+    resp = admin_client.patch(url)
+    assert resp.status_code == 200
+    verified_user.refresh_from_db()
+    assert not verified_user.is_active
+
+
+@pytest.mark.django_db
+def test_admin_cannot_lock_own_account(admin_client, admin_user):
+    url = f"/api/accounts/admin/users/{admin_user.pk}/"
+    resp = admin_client.patch(url)
+    assert resp.status_code == 400
+
+
+@pytest.mark.django_db
+def test_admin_user_detail_delete_removes_user(admin_client, verified_user):
+    url = f"/api/accounts/admin/users/{verified_user.pk}/"
+    resp = admin_client.delete(url)
+    assert resp.status_code == 200
+    assert not User.objects.filter(pk=verified_user.pk).exists()
+
+
+@pytest.mark.django_db
+def test_admin_user_detail_returns_403_for_regular_user(auth_client, admin_user):
+    url = f"/api/accounts/admin/users/{admin_user.pk}/"
+    resp = auth_client.patch(url)
+    assert resp.status_code == 403
