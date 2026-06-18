@@ -11,7 +11,6 @@ const NAV = [
   { label: "Orders",       to: "/admin/orders" },
   { label: "Users",        to: "/admin/users" },
   { label: "Audit Log",    to: "/admin/audit-log" },
-  { label: "Add an Item",  to: "/admin/add-item" },
   { label: "Settings",     to: "/admin/settings" },
 ];
 

@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import AdminLayout from "../../components/admin/AdminLayout.jsx";
 import { createListing } from "../../api/auctions.js";
+import { useAuth } from "../../context/AuthContext.jsx";
 
 const FIELD_STYLE = {
   display: "grid",
@@ -29,6 +30,7 @@ export default function AdminCreate() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
+  const { user, loading } = useAuth();
 
   const handleChange = (field) => (event) => {
     const value = event.target.type === "file"
@@ -67,10 +69,14 @@ export default function AdminCreate() {
         images: [],
       });
     } catch (error) {
-      const errText = error?.response?.data?.detail ||
-        error?.response?.data?.ends_at ||
-        "Could not save item. Please try again.";
-      setMessage({ type: "error", text: errText });
+      if (error?.response?.status === 403) {
+        setMessage({ type: "error", text: "Admin access required." });
+      } else {
+        const errText = error?.response?.data?.detail ||
+          error?.response?.data?.ends_at ||
+          "Could not save item. Please try again.";
+        setMessage({ type: "error", text: errText });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -81,6 +87,11 @@ export default function AdminCreate() {
       <p className="admin-eyebrow">SecureBid Admin Panel</p>
       <h1 className="admin-page-title">Create a new item listing</h1>
 
+      {loading ? (
+        <p>Loading…</p>
+      ) : (!user || !user.is_staff) ? (
+        <p className="admin-error-text">Admin access required to create listings.</p>
+      ) : (
       <form onSubmit={handleSubmit}>
         <section style={SECTION_STYLE}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", marginBottom: "1.25rem" }}>
@@ -181,10 +192,11 @@ export default function AdminCreate() {
           </div>
         </section>
 
-        <button type="submit" className="btn-gold">
-          Save item
+        <button type="submit" className="btn-gold" disabled={submitting || !user?.is_staff}>
+          {submitting ? "Saving…" : "Save item"}
         </button>
       </form>
+      )}
     </AdminLayout>
   );
 }
