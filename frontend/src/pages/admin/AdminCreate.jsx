@@ -48,11 +48,19 @@ export default function AdminCreate() {
         const formData = new FormData();
         formData.append("file", files[0]);
         const { key, url } = await uploadListingImage(formData);
+        let previewUrl = url;
+        if (typeof url === "string" && /^https?:\/\//i.test(url)) {
+          try {
+            previewUrl = new URL(url).pathname;
+          } catch {
+            previewUrl = url;
+          }
+        }
         setForm((prev) => ({
           ...prev,
           images: files,
           imageKey: key,
-          imageUrl: url,
+          imageUrl: previewUrl,
         }));
         setMessage({ type: "success", text: "Image uploaded successfully." });
       } catch (err) {

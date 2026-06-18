@@ -165,6 +165,5 @@ class ListingImageUploadView(APIView):
         name = f"listings/{uuid4().hex}_{f.name}"
         saved_name = default_storage.save(name, f)
         relative_url = default_storage.url(saved_name)
-        absolute_url = request.build_absolute_uri(relative_url)
 
-        return Response({"key": saved_name, "url": absolute_url}, status=201)
+        return Response({"key": saved_name, "url": relative_url}, status=201)
