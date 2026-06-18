@@ -31,9 +31,14 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-For WebSocket/ASGI support, run with Daphne:
+In production, run two separate application processes behind Nginx: Gunicorn
+(WSGI) serves `/api/` and `/admin/`, Daphne (ASGI) serves `/ws/`.
 
 ```bash
+# REST API / admin (Gunicorn, WSGI) — port 8001
+gunicorn securebid.wsgi:application -b 0.0.0.0:8001
+
+# WebSocket (Daphne, ASGI) — port 8000
 daphne -b 0.0.0.0 -p 8000 securebid.asgi:application
 ```
 

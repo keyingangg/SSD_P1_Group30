@@ -1,18 +1,19 @@
-django
-djangorestframework
-django-cors-headers
-channels
-daphne
-psycopg2-binary
-python-dotenv
-stripe
-argon2-cffi
-python-magic-bin ; sys_platform == "win32"
-python-magic ; sys_platform != "win32"
-django-axes
-django-ratelimit
-django-auditlog
-pytest
-pytest-django
-pytest-dotenv
-coverage
+django==6.0.6
+djangorestframework==3.17.1
+django-cors-headers==4.9.0
+channels==4.3.2
+daphne==4.2.2
+gunicorn==26.0.0
+psycopg2-binary==2.9.12
+python-dotenv==1.2.2
+stripe==15.2.1
+argon2-cffi==25.1.0
+python-magic-bin==0.4.14 ; sys_platform == "win32"
+python-magic==0.4.27 ; sys_platform != "win32"
+django-axes==8.3.1
+django-ratelimit==4.1.0
+django-auditlog==3.4.1
+pytest==9.1.0
+pytest-django==4.12.0
+pytest-dotenv==0.5.2
+coverage==7.14.1
