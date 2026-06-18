@@ -205,7 +205,7 @@ AXES_LOCK_OUT_AT_FAILURE = True
 AXES_HANDLER = "axes.handlers.database.AxesDatabaseHandler"
 
 # Lockout identity is based on username/email + IP address.
-AXES_LOCKOUT_PARAMETERS = ["username"]
+AXES_LOCKOUT_PARAMETERS = ["username", "ip_address"]
 
 AXES_USERNAME_FORM_FIELD = "email"
 
