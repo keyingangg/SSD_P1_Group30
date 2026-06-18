@@ -1,6 +1,8 @@
 """Serializers for the auctions app."""
 from rest_framework import serializers
 
+from .models import Listing
+
 
 class ListingSerializer(serializers.Serializer):
     """Serialize a listing for public/detail views (no bidder identities)."""
@@ -21,3 +23,48 @@ class BidSubmitSerializer(serializers.Serializer):
 
     # TODO: define amount field; all validation re-checked server-side.
     pass
+
+
+class ListingCreateSerializer(serializers.Serializer):
+    """Validate admin listing creation input."""
+
+    title = serializers.CharField(max_length=255)
+    description = serializers.CharField()
+    image_key = serializers.CharField(max_length=512, required=False, allow_blank=True)
+    starting_price = serializers.DecimalField(max_digits=12, decimal_places=2)
+    minimum_increment = serializers.DecimalField(max_digits=12, decimal_places=2)
+    starts_at = serializers.DateTimeField()
+    ends_at = serializers.DateTimeField()
+
+    def validate(self, data):
+        if data["ends_at"] <= data["starts_at"]:
+            raise serializers.ValidationError(
+                {"ends_at": "Auction end time must be after the start time."}
+            )
+        return data
+
+
+class ListingAdminSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Listing
+        fields = [
+            "id",
+            "title",
+            "description",
+            "image_key",
+            "starting_price",
+            "minimum_increment",
+            "starts_at",
+            "ends_at",
+            "status",
+            "current_highest_bid",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "id",
+            "current_highest_bid",
+            "created_at",
+            "updated_at",
+            "status",
+        ]

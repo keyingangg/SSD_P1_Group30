@@ -1,7 +1,11 @@
 """API views for the auctions app."""
+from django.utils import timezone
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from .models import Listing
+from .serializers import ListingAdminSerializer, ListingCreateSerializer
 
 
 class ListingListView(APIView):
@@ -10,8 +14,12 @@ class ListingListView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        # TODO: return published listings only; support search/filter.
-        return Response({"detail": "Not implemented."}, status=501)
+        if not request.user.is_staff:
+            return Response({"detail": "Not implemented."}, status=501)
+
+        queryset = Listing.objects.all().order_by("-starts_at")
+        serializer = ListingAdminSerializer(queryset, many=True)
+        return Response(serializer.data)
 
 
 class ListingDetailView(APIView):
@@ -30,8 +38,28 @@ class ListingCreateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        # TODO: admin check, validate + sanitise input, create listing.
-        return Response({"detail": "Not implemented."}, status=501)
+        if not request.user.is_staff:
+            return Response({"detail": "Admin access required."}, status=403)
+
+        serializer = ListingCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        data = serializer.validated_data
+        status = "scheduled" if data["starts_at"] > timezone.now() else "active"
+
+        listing = Listing.objects.create(
+            created_by=request.user,
+            title=data["title"],
+            description=data["description"],
+            image_key=data.get("image_key", ""),
+            starting_price=data["starting_price"],
+            minimum_increment=data["minimum_increment"],
+            starts_at=data["starts_at"],
+            ends_at=data["ends_at"],
+            status=status,
+        )
+
+        return Response({"detail": "Listing created.", "id": listing.id}, status=201)
 
 
 class ListingUpdateView(APIView):
@@ -40,8 +68,29 @@ class ListingUpdateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, listing_id):
-        # TODO: admin check, block edits after bids unless cancelled.
-        return Response({"detail": "Not implemented."}, status=501)
+        if not request.user.is_staff:
+            return Response({"detail": "Admin access required."}, status=403)
+
+        try:
+            listing = Listing.objects.get(pk=listing_id)
+        except Listing.DoesNotExist:
+            return Response({"detail": "Listing not found."}, status=404)
+
+        serializer = ListingCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        data = serializer.validated_data
+        listing.title = data["title"]
+        listing.description = data["description"]
+        listing.image_key = data.get("image_key", listing.image_key)
+        listing.starting_price = data["starting_price"]
+        listing.minimum_increment = data["minimum_increment"]
+        listing.starts_at = data["starts_at"]
+        listing.ends_at = data["ends_at"]
+        listing.status = "scheduled" if listing.starts_at > timezone.now() else "active"
+        listing.save()
+
+        return Response({"detail": "Listing updated."}, status=200)
 
 
 class ListingDeleteView(APIView):
@@ -50,8 +99,16 @@ class ListingDeleteView(APIView):
     permission_classes = [IsAuthenticated]
 
     def delete(self, request, listing_id):
-        # TODO: admin check, delete/cancel listing.
-        return Response({"detail": "Not implemented."}, status=501)
+        if not request.user.is_staff:
+            return Response({"detail": "Admin access required."}, status=403)
+
+        try:
+            listing = Listing.objects.get(pk=listing_id)
+        except Listing.DoesNotExist:
+            return Response({"detail": "Listing not found."}, status=404)
+
+        listing.delete()
+        return Response(status=204)
 
 
 class BidSubmitView(APIView):

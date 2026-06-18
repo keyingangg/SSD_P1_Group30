@@ -15,6 +15,7 @@ import Dashboard from "./pages/Dashboard.jsx";
 import Checkout from "./pages/Checkout.jsx";
 import AdminOverview from "./pages/admin/AdminOverview.jsx";
 import AdminListings from "./pages/admin/AdminListings.jsx";
+import AdminCreate from "./pages/admin/AdminCreate.jsx";
 import AdminUsers from "./pages/admin/AdminUsers.jsx";
 import NotFound from "./pages/NotFound.jsx";
 
@@ -68,6 +69,14 @@ export default function App() {
           element={
             <ProtectedRoute requireAdmin>
               <AdminListings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/add-item"
+          element={
+            <ProtectedRoute requireAdmin>
+              <AdminCreate />
             </ProtectedRoute>
           }
         />
