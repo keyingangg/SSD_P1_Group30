@@ -6,7 +6,7 @@ A secure web-based luxury goods auction platform with real-time bidding, role-ba
 
 ## Tech Stack
 
-- **Backend:** Django 4.2 + Django REST Framework + Django Channels
+- **Backend:** Django 5.2.15 + Django REST Framework + Django Channels
 - **Frontend:** React (Vite)
 - **Database:** PostgreSQL (Supabase, TLS on port 5432)
 - **Payments:** Stripe (test/demo mode)
