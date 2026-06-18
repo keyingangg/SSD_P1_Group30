@@ -4,8 +4,7 @@ import CountdownTimer from "./CountdownTimer.jsx";
 
 // Compact listing summary used in the listings grid.
 export default function AuctionCard({ listing }) {
-  const backendHost = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
-  const imageUrl = listing.image_key ? `${backendHost}/images/${listing.image_key}` : null;
+  const imageUrl = listing.image_key ? `/images/${listing.image_key}` : null;
 
   return (
     <Link to={`/listings/${listing.id}`} style={{ textDecoration: "none", color: "inherit" }}>
