@@ -103,3 +103,48 @@ class StaffInviteToken(models.Model):
 
     class Meta:
         db_table = "staff_invite_tokens"
+
+class AccountLockoutProfile(models.Model):
+    """Stores escalating account lockout state for a user."""
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="lockout_profile",
+    )
+    lockout_level = models.PositiveIntegerField(default=0)
+    locked_until = models.DateTimeField(null=True, blank=True)
+    last_lockout_ip = models.GenericIPAddressField(null=True, blank=True)
+    last_lockout_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "account_lockout_profiles"
+
+    def is_locked(self):
+        from django.utils import timezone
+
+        return self.locked_until is not None and self.locked_until > timezone.now()
+
+    def __str__(self):
+        return f"Lockout profile for {self.user.email}"
+
+
+class UserSessionRecord(models.Model):
+    """Tracks known login devices/locations for new-session notifications."""
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="session_records",
+    )
+    ip_address = models.GenericIPAddressField()
+    user_agent = models.TextField()
+    first_seen_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "user_session_records"
+        unique_together = ("user", "ip_address", "user_agent")
+
+    def __str__(self):
+        return f"{self.user.email} - {self.ip_address}"

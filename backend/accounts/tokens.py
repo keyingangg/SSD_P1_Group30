@@ -8,6 +8,7 @@ import secrets
 from datetime import timedelta
 
 from django.utils import timezone
+from django.utils.crypto import constant_time_compare
 
 from .models import EmailVerificationToken, PasswordResetToken, StaffInviteToken
 
@@ -66,18 +67,24 @@ def generate_staff_invite_token(user, invited_by):
 
 
 def validate_token(token_string, token_model):
-    """Validate a raw token against a token model.
+    """Validate a raw token against a token model using constant-time comparison.
 
     Returns the matching record only if it exists, is unused, and unexpired;
     otherwise returns None.
     """
     if not token_string:
         return None
-    try:
-        record = token_model.objects.get(token=_hash_token(token_string))
-    except token_model.DoesNotExist:
-        return None
 
-    if record.is_used or record.expires_at < timezone.now():
-        return None
-    return record
+    candidate_hash = _hash_token(token_string)
+    now = timezone.now()
+
+    records = token_model.objects.filter(
+        is_used=False,
+        expires_at__gte=now,
+    )
+
+    for record in records:
+        if constant_time_compare(record.token, candidate_hash):
+            return record
+
+    return None

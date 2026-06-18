@@ -65,3 +65,47 @@ def send_password_reset_email(user, token):
         [user.email],
         fail_silently=False,
     )
+
+
+def send_account_lockout_email(user, ip_address, locked_until, lockout_duration):
+    """Send an email when the account is temporarily locked."""
+    site = settings.SITE_NAME
+    subject = f"Security alert: Your {site} account was temporarily locked"
+
+    message = (
+        f"Your {site} account has been temporarily locked due to multiple failed "
+        "login attempts.\n\n"
+        f"IP address: {ip_address}\n"
+        f"Lockout duration: {lockout_duration}\n"
+        f"Locked until: {locked_until}\n\n"
+        "If this was not you, please reset your password immediately."
+    )
+
+    send_mail(
+        subject,
+        message,
+        settings.DEFAULT_FROM_EMAIL,
+        [user.email],
+        fail_silently=False,
+    )
+
+def send_new_login_email(user, ip_address, user_agent):
+    """Send an email when a new device/location logs in."""
+    site = settings.SITE_NAME
+    subject = f"Security alert: New login to your {site} account"
+
+    message = (
+        f"A new login to your {site} account was detected.\n\n"
+        f"IP address: {ip_address}\n"
+        f"Device/browser: {user_agent}\n\n"
+        "If this was you, no action is needed.\n"
+        "If this was not you, please reset your password immediately."
+    )
+
+    send_mail(
+        subject,
+        message,
+        settings.DEFAULT_FROM_EMAIL,
+        [user.email],
+        fail_silently=False,
+    )

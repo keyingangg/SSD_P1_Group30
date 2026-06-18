@@ -18,10 +18,6 @@ CORS_ALLOWED_ORIGINS = [
     if origin.strip()
 ]
 
-# Cookies only transmitted over HTTPS.
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
-
 # Force HTTPS — disable via env var when deploying without a TLS certificate
 # (e.g. school EC2 with a raw IP address).  Set SECURE_SSL=false in .env to
 # serve over HTTP. Leave unset (defaults to true) for real production.
@@ -31,8 +27,25 @@ SECURE_HSTS_SECONDS = 31536000 if _ssl else 0
 SECURE_HSTS_INCLUDE_SUBDOMAINS = _ssl
 SECURE_HSTS_PRELOAD = _ssl
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https") if _ssl else None
+
+# Cookies are only marked Secure when actually served over HTTPS. A
+
+# login would silently break on a non-TLS deployment.
 SESSION_COOKIE_SECURE = _ssl
 CSRF_COOKIE_SECURE = _ssl
+
+# Use the __Host- prefix in production. This requires the Secure attribute,
+# Path="/", and no Domain — so it only applies when we're actually on HTTPS.
+# Falling back to the plain cookie names when _ssl is False avoids browsers
+# silently dropping a __Host- cookie that lacks Secure.
+if _ssl:
+    SESSION_COOKIE_NAME = "__Host-sessionid"
+    SESSION_COOKIE_PATH = "/"
+    SESSION_COOKIE_DOMAIN = None
+
+    CSRF_COOKIE_NAME = "__Host-csrftoken"
+    CSRF_COOKIE_PATH = "/"
+    CSRF_COOKIE_DOMAIN = None
 
 # Production email is delivered over TLS-secured SMTP (configured in base.py).
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"

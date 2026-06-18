@@ -5,13 +5,18 @@ MFA/OTP is intentionally out of scope here and will be added separately.
 """
 import logging
 import smtplib
+import time
 
+
+from axes.utils import reset
 from django.contrib.auth import authenticate
 from django.contrib.auth import get_user_model
 from django.contrib.auth import login as django_login
 from django.contrib.auth import logout as django_logout
+from django.contrib.sessions.models import Session
 from django.core.exceptions import PermissionDenied
 from django.core.mail import BadHeaderError
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -20,8 +25,21 @@ from rest_framework.views import APIView
 
 logger = logging.getLogger("securebid")
 
-from .emails import send_invite_email, send_password_reset_email, send_verification_email
-from .models import EmailVerificationToken, PasswordResetToken, StaffInviteToken
+from .emails import (
+    send_invite_email,
+    send_new_login_email,
+    send_password_reset_email,
+    send_verification_email,
+)
+
+from .models import (
+    AccountLockoutProfile,
+    EmailVerificationToken,
+    PasswordResetToken,
+    StaffInviteToken,
+    UserSessionRecord,
+)
+
 from .serializers import (
     AcceptInviteSerializer,
     AdminUserListSerializer,
@@ -48,6 +66,79 @@ REGISTRATION_RESPONSE = {
     "sent. Please check your inbox."
 }
 
+# Uniform response used for every failed login outcome to prevent account
+# enumeration (NFSR-AU-05).
+AUTH_FAILURE_RESPONSE = {
+    "detail": "Invalid credentials or account not found."
+}
+
+# Minimum response time for login attempts to reduce timing-based enumeration.
+AUTH_MIN_RESPONSE_SECONDS = 0.5
+
+
+def normalise_auth_response_timing(start_time):
+    """Ensure login responses take at least a fixed minimum time."""
+    elapsed = time.perf_counter() - start_time
+    remaining = AUTH_MIN_RESPONSE_SECONDS - elapsed
+
+    if remaining > 0:
+        time.sleep(remaining)
+
+
+def invalidate_all_user_sessions(user):
+    """Delete all active sessions belonging to this user."""
+    active_sessions = Session.objects.filter(expire_date__gte=timezone.now())
+
+    for session in active_sessions:
+        data = session.get_decoded()
+
+        if str(user.id) == str(data.get("_auth_user_id")):
+            session.delete()
+
+
+def get_client_ip(request):
+    """Get client IP address from the request."""
+    return request.META.get("REMOTE_ADDR")
+
+
+def notify_new_device_or_location(request, user):
+    """Notify user when a new IP address and browser combination logs in."""
+    ip_address = get_client_ip(request)
+    user_agent = request.META.get("HTTP_USER_AGENT", "")
+
+    record, created = UserSessionRecord.objects.get_or_create(
+        user=user,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+
+    if created:
+        try:
+            send_new_login_email(
+                user=user,
+                ip_address=ip_address,
+                user_agent=user_agent,
+            )
+        except Exception as exc:
+            logger.error("Failed to send new login email to %s: %s", user.email, exc)
+
+
+def clear_expired_lockout(email):
+    """Clear django-axes and custom lockout if the custom lockout has expired."""
+    try:
+        user = User.objects.get(email__iexact=email)
+    except User.DoesNotExist:
+        return
+
+    profile = getattr(user, "lockout_profile", None)
+
+    if profile and profile.locked_until and profile.locked_until <= timezone.now():
+        profile.locked_until = None
+        profile.save(update_fields=["locked_until"])
+
+        # Clear django-axes attempts so the user can login after lockout expiry.
+        reset(username=user.email)
+
 
 class CSRFView(APIView):
     """Set the CSRF cookie so the SPA can make authenticated unsafe requests."""
@@ -65,6 +156,8 @@ class RegisterView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        start_time = time.perf_counter()
+
         serializer = UserRegistrationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         email = serializer.validated_data["email"]
@@ -92,12 +185,16 @@ class RegisterView(APIView):
             # Verified account already exists: respond identically, do nothing.
         except (BadHeaderError, OSError) as exc:
             logger.error("Failed to send verification email to %s: %s", email, exc)
+            normalise_auth_response_timing(start_time)
             return Response(
-                {"detail": "We could not send the verification email. "
-                 "Please check your email address and try again shortly."},
+                {
+                    "detail": "We could not send the verification email. "
+                    "Please check your email address and try again shortly."
+                },
                 status=503,
             )
 
+        normalise_auth_response_timing(start_time)
         return Response(REGISTRATION_RESPONSE, status=201)
 
 
@@ -135,6 +232,8 @@ class LoginView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        start_time = time.perf_counter()
+
         serializer = UserLoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         email = serializer.validated_data["email"]
@@ -144,23 +243,28 @@ class LoginView(APIView):
         # PermissionDenied. Unverified accounts are inactive, so authenticate()
         # returns None for them -> the same generic error (no enumeration).
         try:
-            user = authenticate(request, username=email, password=password)
+            clear_expired_lockout(email)
+            user = authenticate(request, username=email, email=email, password=password)
         except PermissionDenied:
-            return Response(
-                {
-                    "detail": "Too many failed attempts. Your account is "
-                    "temporarily locked. Try again later."
-                },
-                status=403,
-            )
+            normalise_auth_response_timing(start_time)
+            return Response(AUTH_FAILURE_RESPONSE, status=400)
 
         if user is None:
-            return Response(
-                {"detail": "Invalid credentials or account not found."},
-                status=400,
-            )
+            normalise_auth_response_timing(start_time)
+            return Response(AUTH_FAILURE_RESPONSE, status=400)
+
+        # Rotate the current session key before login to prevent session
+        # logging in on one device should not sign them out elsewhere.
+        # Sessions are only force-invalidated across all devices on password
+        # change/reset (see PasswordChangeView / PasswordResetConfirmView).
+        request.session.cycle_key()
 
         django_login(request, user)
+
+        # Notify user if this is a new device/location.
+        notify_new_device_or_location(request, user)
+
+        normalise_auth_response_timing(start_time)
         return Response(UserProfileSerializer(user).data, status=200)
 
 
@@ -193,6 +297,8 @@ class PasswordResetRequestView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
+        start_time = time.perf_counter()
+
         serializer = PasswordResetRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         email = serializer.validated_data["email"]
@@ -208,6 +314,7 @@ class PasswordResetRequestView(APIView):
         except (BadHeaderError, OSError) as exc:
             logger.error("Failed to send password reset email to %s: %s", email, exc)
 
+        normalise_auth_response_timing(start_time)
         return Response(
             {
                 "detail": "If an account with that email exists, a password reset "
@@ -245,8 +352,58 @@ class PasswordResetConfirmView(APIView):
         record.is_used = True
         record.save(update_fields=["is_used"])
 
+        # Reset custom escalating lockout profile only after successful password reset.
+        AccountLockoutProfile.objects.update_or_create(
+            user=user,
+            defaults={
+                "lockout_level": 0,
+                "locked_until": None,
+                "last_lockout_ip": None,
+                "last_lockout_at": None,
+            },
+        )
+
+        # Reset django-axes failed login attempts for this account.
+        reset(username=user.email)
+
+        # Invalidate all active sessions across all devices.
+        invalidate_all_user_sessions(user)
+
         return Response(
             {"detail": "Password updated. You can now sign in."},
+            status=200,
+        )
+
+
+class PasswordChangeView(APIView):
+    """Allow an authenticated user to change their password."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        current_password = request.data.get("current_password")
+        new_password = request.data.get("new_password")
+
+        if not current_password or not new_password:
+            return Response(
+                {"detail": "Current password and new password are required."},
+                status=400,
+            )
+
+        if not request.user.check_password(current_password):
+            return Response(
+                {"detail": "Current password is incorrect."},
+                status=400,
+            )
+
+        request.user.set_password(new_password)
+        request.user.save(update_fields=["password"])
+
+        # Invalidate all active sessions across all devices.
+        invalidate_all_user_sessions(request.user)
+
+        return Response(
+            {"detail": "Password changed successfully. Please sign in again."},
             status=200,
         )
 
@@ -327,7 +484,14 @@ class AcceptInviteView(APIView):
         user.set_password(password)
         user.is_active = True
         user.is_email_verified = True
-        user.save(update_fields=["display_name", "password", "is_active", "is_email_verified"])
+        user.save(
+            update_fields=[
+                "display_name",
+                "password",
+                "is_active",
+                "is_email_verified",
+            ]
+        )
 
         record.is_used = True
         record.save(update_fields=["is_used"])
@@ -381,9 +545,15 @@ class AdminUserDetailView(APIView):
         except User.DoesNotExist:
             return None, Response({"detail": "User not found."}, status=404)
         if target.pk == request.user.pk:
-            return None, Response({"detail": "You cannot perform this action on your own account."}, status=400)
+            return None, Response(
+                {"detail": "You cannot perform this action on your own account."},
+                status=400,
+            )
         if target.is_superuser:
-            return None, Response({"detail": "Superuser accounts cannot be modified here."}, status=403)
+            return None, Response(
+                {"detail": "Superuser accounts cannot be modified here."},
+                status=403,
+            )
         return target, None
 
     def patch(self, request, user_id):

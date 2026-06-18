@@ -40,7 +40,7 @@ INSTALLED_APPS = [
     "axes",
     "auditlog",
     # Local apps
-    "accounts",
+    "accounts.apps.AccountsConfig",
     "auctions",
     "payments",
     "core",
@@ -86,10 +86,10 @@ ASGI_APPLICATION = "securebid.asgi.application"
 # --------------------------------------------------------------------------
 AUTH_USER_MODEL = "accounts.User"
 
-# django-axes backend must come before the default ModelBackend.
+# django-axes backend must come before the custom ModelBackend.
 AUTHENTICATION_BACKENDS = [
     "axes.backends.AxesStandaloneBackend",
-    "django.contrib.auth.backends.ModelBackend",
+    "accounts.auth_backend.EscalatingLockoutBackend",
 ]
 
 # Argon2id is the OWASP-recommended password hashing algorithm.
@@ -165,9 +165,17 @@ CHANNEL_LAYERS = {
 # --------------------------------------------------------------------------
 # Sessions & cookies
 # --------------------------------------------------------------------------
+
+# Expire session after 30 minutes of inactivity.
+SESSION_COOKIE_AGE =  30 * 60
+SESSION_SAVE_EVERY_REQUEST = True
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Strict"
-CSRF_COOKIE_HTTPONLY = False  # Frontend reads the CSRF token to send it back.
+
+# Frontend reads the CSRF token to send it back.
+CSRF_COOKIE_HTTPONLY = False
 CSRF_COOKIE_SAMESITE = "Strict"
 
 # --------------------------------------------------------------------------
@@ -187,10 +195,26 @@ SITE_NAME = os.environ.get("SITE_NAME", "SecureBid")
 # django-axes (brute-force / credential-stuffing protection)
 # --------------------------------------------------------------------------
 # Lock after 5 consecutive failures; the counter resets on a successful login.
-# Escalating lockout durations are a planned enhancement (NFSR-AU-04).
+# Escalating lockout durations are handled in accounts/lockout.py.
+
+# Lock after 5 consecutive failed login attempts.
 AXES_FAILURE_LIMIT = 5
-AXES_RESET_ON_SUCCESS = True
-AXES_LOCKOUT_PARAMETERS = [["ip_address", "username"]]
+AXES_LOCK_OUT_AT_FAILURE = True
+
+# Store attempts in database so counters persist across sessions.
+AXES_HANDLER = "axes.handlers.database.AxesDatabaseHandler"
+
+# Lockout identity is based on username/email + IP address.
+AXES_LOCKOUT_PARAMETERS = ["username"]
+
+AXES_USERNAME_FORM_FIELD = "email"
+
+# Do not reset failed counters on successful login.
+# Requirement: counter resets only after successful password reset.
+AXES_RESET_ON_SUCCESS = False
+
+# We handle escalating lockout duration ourselves in accounts/lockout.py.
+AXES_COOLOFF_TIME = None
 
 # --------------------------------------------------------------------------
 # Email
