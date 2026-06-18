@@ -16,3 +16,9 @@ CSRF_TRUSTED_ORIGINS = ["http://localhost:5173"]
 # Cookies are not sent over HTTPS in local development.
 SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False
+
+# Media files (uploads).
+# Store user-uploaded files under `backend/images/` so uploads are kept inside
+# the `backend/` directory rather than the repository root.
+MEDIA_ROOT = BASE_DIR / "backend" / "images"
+MEDIA_URL = "/images/"

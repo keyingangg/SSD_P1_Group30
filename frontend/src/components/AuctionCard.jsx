@@ -4,11 +4,39 @@ import CountdownTimer from "./CountdownTimer.jsx";
 
 // Compact listing summary used in the listings grid.
 export default function AuctionCard({ listing }) {
-  // TODO: render title, current highest bid, countdown, and link to detail.
+  const backendHost = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
+  const imageUrl = listing.image_key ? `${backendHost}/images/${listing.image_key}` : null;
+
   return (
-    <div className="auction-card">
-      {/* TODO */}
-      <Link to={listing ? `/listings/${listing.id}` : "#"}>View</Link>
-    </div>
+    <Link to={`/listings/${listing.id}`} style={{ textDecoration: "none", color: "inherit" }}>
+      <div className="auction-card">
+        {imageUrl && (
+          <div
+            className="auction-card-image"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              overflow: "hidden",
+              minHeight: 80,
+            }}
+          >
+            <img
+              src={imageUrl}
+              alt={listing.title}
+              style={{ maxWidth: "100%", height: "auto", objectFit: "contain" }}
+            />
+          </div>
+        )}
+        <div className="auction-card-content">
+          <h3>{listing.title}</h3>
+          <div className="auction-card-price">
+            <span className="label">Current bid:</span>
+            <span className="price">${listing.current_highest_bid || listing.starting_price}</span>
+          </div>
+          <CountdownTimer endsAt={listing.ends_at} />
+        </div>
+      </div>
+    </Link>
   );
 }

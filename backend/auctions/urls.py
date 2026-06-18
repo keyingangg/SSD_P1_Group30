@@ -6,6 +6,7 @@ from . import views
 urlpatterns = [
     path("", views.ListingListView.as_view(), name="listing-list"),
     path("create/", views.ListingCreateView.as_view(), name="listing-create"),
+    path("upload-image/", views.ListingImageUploadView.as_view(), name="upload-image"),
     path(
         "bids/history/",
         views.UserBidHistoryView.as_view(),

@@ -1,8 +1,12 @@
 """API views for the auctions app."""
+from uuid import uuid4
+
 from django.utils import timezone
+from django.core.files.storage import default_storage
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.parsers import MultiPartParser
 
 from .models import Listing
 from .serializers import ListingAdminSerializer, ListingCreateSerializer
@@ -47,11 +51,17 @@ class ListingCreateView(APIView):
         data = serializer.validated_data
         status = "scheduled" if data["starts_at"] > timezone.now() else "active"
 
+        # Normalize image_key: store None when blank to keep DB consistent.
+        img_key = data.get("image_key")
+        if isinstance(img_key, str) and img_key.strip() == "":
+            img_key = None
+
         listing = Listing.objects.create(
             created_by=request.user,
             title=data["title"],
             description=data["description"],
-            image_key=data.get("image_key", ""),
+            image_key=img_key,
+            category=data.get("category", "Others"),
             starting_price=data["starting_price"],
             minimum_increment=data["minimum_increment"],
             starts_at=data["starts_at"],
@@ -59,7 +69,7 @@ class ListingCreateView(APIView):
             status=status,
         )
 
-        return Response({"detail": "Listing created.", "id": listing.id}, status=201)
+        return Response({"detail": "Listing created.", "id": listing.id, "image_key": listing.image_key}, status=201)
 
 
 class ListingUpdateView(APIView):
@@ -129,3 +139,32 @@ class UserBidHistoryView(APIView):
     def get(self, request):
         # TODO: return bids scoped to request.user.
         return Response({"detail": "Not implemented."}, status=501)
+
+
+class ListingImageUploadView(APIView):
+    """Upload a listing image (authenticated, admin only)."""
+
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser]
+
+    def post(self, request):
+        if not request.user.is_staff:
+            return Response({"detail": "Admin access required."}, status=403)
+
+        f = request.FILES.get("file")
+        if not f:
+            return Response({"detail": "No file provided."}, status=400)
+
+        # Validate file size (5MB max) and content type
+        if f.size > 5 * 1024 * 1024:
+            return Response({"detail": "File too large (max 5MB)."}, status=400)
+        if not f.content_type.startswith("image/"):
+            return Response({"detail": "Invalid file type (must be image)."}, status=400)
+
+        # Save with unique name
+        name = f"listings/{uuid4().hex}_{f.name}"
+        saved_name = default_storage.save(name, f)
+        relative_url = default_storage.url(saved_name)
+        absolute_url = request.build_absolute_uri(relative_url)
+
+        return Response({"key": saved_name, "url": absolute_url}, status=201)

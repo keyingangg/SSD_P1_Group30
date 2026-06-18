@@ -25,6 +25,12 @@ export async function deleteListing(listingId) {
   return data;
 }
 
+// Use the shared axiosClient so CSRF cookie and credentials are handled
+export async function uploadListingImage(formData) {
+  const { data } = await axiosClient.post("/auctions/upload-image/", formData);
+  return data; // { key, url }
+}
+
 // TODO: POST /auctions/:id/bid/
 export async function submitBid(listingId, amount) {}
 

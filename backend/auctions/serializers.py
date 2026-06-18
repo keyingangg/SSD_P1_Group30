@@ -31,6 +31,7 @@ class ListingCreateSerializer(serializers.Serializer):
     title = serializers.CharField(max_length=255)
     description = serializers.CharField()
     image_key = serializers.CharField(max_length=512, required=False, allow_blank=True)
+    category = serializers.CharField(max_length=50, required=False, default="Others")
     starting_price = serializers.DecimalField(max_digits=12, decimal_places=2)
     minimum_increment = serializers.DecimalField(max_digits=12, decimal_places=2)
     starts_at = serializers.DateTimeField()
@@ -52,6 +53,7 @@ class ListingAdminSerializer(serializers.ModelSerializer):
             "title",
             "description",
             "image_key",
+            "category",
             "starting_price",
             "minimum_increment",
             "starts_at",

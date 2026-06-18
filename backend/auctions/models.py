@@ -16,6 +16,18 @@ class Listing(models.Model):
         ("cancelled", "Cancelled"),
     ]
 
+    CATEGORY_CHOICES = [
+        ("Handbag", "Handbag"),
+        ("Watches", "Watches"),
+        ("Perfumes", "Perfumes"),
+        ("Fashion & Apparel", "Fashion & Apparel"),
+        ("Accessories", "Accessories"),
+        ("Fine Art & Collectibles", "Fine Art & Collectibles"),
+        ("Wines & Spirits", "Wines & Spirits"),
+        ("Home Decor & Furniture", "Home Decor & Furniture"),
+        ("Others", "Others"),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -26,6 +38,11 @@ class Listing(models.Model):
     description = models.TextField()
     # Filename reference for the image stored in Supabase Storage.
     image_key = models.CharField(max_length=512, null=True, blank=True)
+    category = models.CharField(
+        max_length=50,
+        choices=CATEGORY_CHOICES,
+        default="Others",
+    )
     starting_price = models.DecimalField(max_digits=12, decimal_places=2)
     current_highest_bid = models.DecimalField(
         max_digits=12, decimal_places=2, default=0
