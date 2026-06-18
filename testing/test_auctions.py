@@ -19,8 +19,8 @@ def test_create_listing_requires_authentication(client):
 
 
 @pytest.mark.django_db
-def test_create_listing_accessible_when_authenticated(auth_client):
-    resp = auth_client.post(CREATE_URL, {}, format="json")
+def test_create_listing_accessible_when_authenticated(admin_client):
+    resp = admin_client.post(CREATE_URL, {}, format="json")
     assert resp.status_code in (200, 201, 400, 501)
 
 
