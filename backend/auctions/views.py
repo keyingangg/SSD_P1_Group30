@@ -1,7 +1,6 @@
 """API views for the auctions app."""
 from uuid import uuid4
 
-from django.utils import timezone
 from django.core.files.storage import default_storage
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -18,10 +17,9 @@ class ListingListView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        if not request.user.is_staff:
-            return Response({"detail": "Not implemented."}, status=501)
-
         queryset = Listing.objects.all().order_by("-starts_at")
+        if not request.user.is_staff:
+            queryset = queryset.exclude(status__in=["draft", "ended", "cancelled"])
         serializer = ListingAdminSerializer(queryset, many=True)
         return Response(serializer.data)
 
@@ -32,8 +30,16 @@ class ListingDetailView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, listing_id):
-        # TODO: return listing; 404 for draft/scheduled to non-admins.
-        return Response({"detail": "Not implemented."}, status=501)
+        try:
+            listing = Listing.objects.get(pk=listing_id)
+        except Listing.DoesNotExist:
+            return Response({"detail": "Listing not found."}, status=404)
+
+        if not request.user.is_staff and listing.status in {"draft", "ended", "cancelled"}:
+            return Response({"detail": "Listing not found."}, status=404)
+
+        serializer = ListingAdminSerializer(listing)
+        return Response(serializer.data)
 
 
 class ListingCreateView(APIView):
@@ -49,7 +55,6 @@ class ListingCreateView(APIView):
         serializer.is_valid(raise_exception=True)
 
         data = serializer.validated_data
-        status = "scheduled" if data["starts_at"] > timezone.now() else "active"
 
         # Normalize image_key: store None when blank to keep DB consistent.
         img_key = data.get("image_key")
@@ -66,7 +71,7 @@ class ListingCreateView(APIView):
             minimum_increment=data["minimum_increment"],
             starts_at=data["starts_at"],
             ends_at=data["ends_at"],
-            status=status,
+            status=Listing.determine_status(data["starts_at"], data["ends_at"]),
         )
 
         return Response({"detail": "Listing created.", "id": listing.id, "image_key": listing.image_key}, status=201)
@@ -97,7 +102,8 @@ class ListingUpdateView(APIView):
         listing.minimum_increment = data["minimum_increment"]
         listing.starts_at = data["starts_at"]
         listing.ends_at = data["ends_at"]
-        listing.status = "scheduled" if listing.starts_at > timezone.now() else "active"
+        if listing.status not in {"draft", "cancelled"}:
+            listing.status = Listing.determine_status(listing.starts_at, listing.ends_at)
         listing.save()
 
         return Response({"detail": "Listing updated."}, status=200)
