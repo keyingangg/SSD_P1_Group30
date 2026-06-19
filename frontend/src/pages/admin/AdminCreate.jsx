@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import AdminLayout from "../../components/admin/AdminLayout.jsx";
@@ -48,7 +48,6 @@ function toSingaporeDateTimeInputValue(value) {
 export default function AdminCreate() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const imageInputRef = useRef(null);
   const editingId = searchParams.get("edit");
   const isEditMode = Boolean(editingId);
   const [form, setForm] = useState({
@@ -74,21 +73,6 @@ export default function AdminCreate() {
   function formatLocalDateTime(value) {
     return toSingaporeDateTimeInputValue(value);
   }
-
-  const hasImage = Boolean(form.imageUrl || form.imageKey || form.images?.length);
-
-  const clearImageSelection = () => {
-    if (imageInputRef.current) {
-      imageInputRef.current.value = "";
-    }
-
-    setForm((prev) => ({
-      ...prev,
-      images: [],
-      imageKey: "",
-      imageUrl: "",
-    }));
-  };
 
   useEffect(() => {
     if (!isEditMode || !editingId) return;
@@ -129,17 +113,37 @@ export default function AdminCreate() {
   }, [editingId, isEditMode]);
 
   const handleChange = (field) => async (event) => {
-    if (field === "images") {
-      const files = Array.from(event.target.files || []);
-      const selectedFile = files[0] || null;
-      const previewUrl = selectedFile ? URL.createObjectURL(selectedFile) : "";
+    if (field === "images" && event.target.files.length) {
+      // Upload file immediately
+      const files = Array.from(event.target.files);
+      setUploading(true);
+      setMessage(null);
 
-      setForm((prev) => ({
-        ...prev,
-        images: files,
-        imageKey: "",
-        imageUrl: previewUrl,
-      }));
+      try {
+        const formData = new FormData();
+        formData.append("file", files[0]);
+        const { key, url } = await uploadListingImage(formData);
+        let previewUrl = url;
+        if (typeof url === "string" && /^https?:\/\//i.test(url)) {
+          try {
+            previewUrl = new URL(url).pathname;
+          } catch {
+            previewUrl = url;
+          }
+        }
+        setForm((prev) => ({
+          ...prev,
+          images: files,
+          imageKey: key,
+          imageUrl: previewUrl,
+        }));
+        setMessage({ type: "success", text: "Image uploaded successfully." });
+      } catch (err) {
+        const errText = err?.response?.data?.detail || "Could not upload image.";
+        setMessage({ type: "error", text: errText });
+      } finally {
+        setUploading(false);
+      }
       return;
     }
 
@@ -190,20 +194,11 @@ export default function AdminCreate() {
     setMessage(null);
 
     try {
-      let imageKey = form.imageKey;
-      if (form.images?.length) {
-        setUploading(true);
-        const formData = new FormData();
-        formData.append("file", form.images[0]);
-        const uploadedImage = await uploadListingImage(formData);
-        imageKey = uploadedImage.key;
-      }
-
       const payload = {
         title: form.title,
         description: form.description,
         category: form.category,
-        image_key: imageKey,
+        image_key: form.imageKey,
         starting_price: form.startingPrice.replace(/,/g, ""),
         minimum_increment: form.minimumIncrement.replace(/,/g, ""),
         starts_at: form.startTime,
@@ -267,7 +262,6 @@ export default function AdminCreate() {
         setMessage({ type: "error", text: saveAsDraft ? "Could not save draft. Please try again." : "Could not create item. Please try again." });
       }
     } finally {
-      setUploading(false);
       setSubmitting(false);
     }
   };
@@ -355,7 +349,6 @@ export default function AdminCreate() {
               <label htmlFor="images">Images</label>
               <input
                 id="images"
-                ref={imageInputRef}
                 type="file"
                 accept="image/*"
                 multiple
@@ -363,41 +356,24 @@ export default function AdminCreate() {
                 disabled={uploading}
                 style={{ display: "none" }}
               />
-              {!hasImage ? (
-                <label
-                  htmlFor="images"
-                  className="btn-gold"
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: "fit-content",
-                    cursor: uploading ? "not-allowed" : "pointer",
-                    opacity: uploading ? 0.6 : 1,
-                    pointerEvents: uploading ? "none" : "auto",
-                  }}
-                >
-                  {uploading ? "Uploading..." : "Choose files"}
-                </label>
-              ) : (
-                <button
-                  type="button"
-                  className="btn-gold"
-                  onClick={clearImageSelection}
-                  disabled={uploading}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: "fit-content",
-                    cursor: uploading ? "not-allowed" : "pointer",
-                    opacity: uploading ? 0.6 : 1,
-                    pointerEvents: uploading ? "none" : "auto",
-                  }}
-                >
-                  Remove image
-                </button>
-              )}
+              <label
+                htmlFor="images"
+                className="btn-gold"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: "fit-content",
+                  cursor: uploading ? "not-allowed" : "pointer",
+                  opacity: uploading ? 0.6 : 1,
+                  pointerEvents: uploading ? "none" : "auto",
+                }}
+              >
+                {uploading ? "Uploading..." : "Choose files"}
+              </label>
+              <p style={{ marginTop: ".5rem", marginBottom: 0, fontSize: ".9rem", opacity: 0.8 }}>
+                {form.images?.length ? `${form.images.length} file(s) selected` : "No file chosen"}
+              </p>
               {form.imageUrl && (
                 <div style={{ marginTop: ".5rem" }}>
                   <img src={form.imageUrl} alt="Preview" style={{ maxWidth: "200px", maxHeight: "200px", borderRadius: 6 }} />
@@ -477,17 +453,6 @@ export default function AdminCreate() {
               style={{ opacity: 0.85, width: "auto", minWidth: 180, flex: "1 1 220px" }}
             >
               {submitting ? "Saving..." : uploading ? "Uploading..." : "Save as draft"}
-            </button>
-          )}
-          {isEditMode && (
-            <button
-              type="button"
-              className="btn-gold"
-              onClick={() => navigate("/admin/listings")}
-              disabled={submitting || uploading}
-              style={{ width: "auto", minWidth: 180, flex: "1 1 220px", background: "transparent", color: "var(--ink)", border: "1px solid rgba(27,26,23,.18)" }}
-            >
-              Cancel update
             </button>
           )}
           <button
