@@ -1,13 +1,20 @@
 import { useState, useEffect } from "react";
 import { getListings } from "../api/auctions.js";
 import AuctionCard from "../components/AuctionCard.jsx";
+import { getCategoryOptions } from "../config/categories.js";
 
-const CATEGORIES = ["All", "Timepieces", "Handbags", "Jewellery", "Art"];
+const CATEGORIES = ["All", ...getCategoryOptions()];
 
 const SIDEBAR = {
-  Status: ["Live Now", "Scheduled"],
-  Category: ["Timepieces", "Handbags & Leather", "Fine Jewellery", "Art & Prints", "Collectibles"],
+  Status: ["All", "Live Now", "Opening soon"],
+  Category: getCategoryOptions(),
   Estimate: ["Under S$5,000", "S$5k — S$20k", "S$20k — S$100k", "Over S$100k"],
+};
+
+const STATUS_FILTER_VALUES = {
+  All: "All",
+  "Live Now": "active",
+  "Opening soon": "scheduled",
 };
 
 export default function Home() {
@@ -15,6 +22,8 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState("All");
   const [search, setSearch] = useState("");
+  const [sidebarStatus, setSidebarStatus] = useState("All");
+  const [sidebarCategory, setSidebarCategory] = useState("All");
 
   useEffect(() => {
     getListings().then(setListings).catch(console.error).finally(() => setLoading(false));
@@ -22,7 +31,11 @@ export default function Home() {
 
   const visible = listings.filter((l) => {
     const matchSearch = l.title.toLowerCase().includes(search.toLowerCase());
-    return matchSearch;
+    const matchSidebarStatus =
+      sidebarStatus === "All" || String(l.status || "").toLowerCase() === sidebarStatus.toLowerCase();
+    const matchSidebarCategory =
+      sidebarCategory === "All" || String(l.category || "").toLowerCase() === sidebarCategory.toLowerCase();
+    return matchSearch && matchSidebarStatus && matchSidebarCategory;
   });
 
   return (
@@ -42,8 +55,12 @@ export default function Home() {
             {CATEGORIES.map((c) => (
               <button
                 key={c}
+                type="button"
                 className={`cat-tab${activeCategory === c ? " active" : ""}`}
-                onClick={() => setActiveCategory(c)}
+                onClick={() => {
+                  setActiveCategory(c);
+                  setSidebarCategory(c);
+                }}
               >
                 {c === "All" ? "All Listings" : c}
               </button>
@@ -67,7 +84,21 @@ export default function Home() {
               <p className="cat-sidebar-title">{group}</p>
               {options.map((opt) => (
                 <label className="cat-filter-option" key={opt}>
-                  <input type="radio" name={group} />
+                  <input
+                    type="radio"
+                    name={group}
+                    checked={
+                      group === "Category"
+                        ? sidebarCategory === opt
+                        : group === "Status"
+                          ? sidebarStatus === (STATUS_FILTER_VALUES[opt] || opt)
+                          : false
+                    }
+                    onChange={() => {
+                      if (group === "Category") setSidebarCategory(opt);
+                      if (group === "Status") setSidebarStatus(STATUS_FILTER_VALUES[opt] || opt);
+                    }}
+                  />
                   <span>{opt}</span>
                 </label>
               ))}

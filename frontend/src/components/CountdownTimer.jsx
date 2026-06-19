@@ -39,14 +39,22 @@ export default function CountdownTimer({ startsAt, endsAt, preStartDisplay = "sc
     let startTimer;
     const currentNow = Date.now();
 
-    // Before auction start: do not run countdown ticks.
+    // Before auction start: tick every second if showing a live countdown,
+    // otherwise just wake up once when the auction starts.
     if (startMs && isBeforeStart) {
-      const delay = Math.max(startMs - currentNow, 0);
-      startTimer = setTimeout(() => {
-        setNow(Date.now());
-      }, delay);
+      if (preStartDisplay === "countdown") {
+        timer = setInterval(() => {
+          setNow(Date.now());
+        }, 1000);
+      } else {
+        const delay = Math.max(startMs - currentNow, 0);
+        startTimer = setTimeout(() => {
+          setNow(Date.now());
+        }, delay);
+      }
 
       return () => {
+        if (timer) clearInterval(timer);
         if (startTimer) clearTimeout(startTimer);
       };
     }
