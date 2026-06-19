@@ -46,6 +46,11 @@ class ListingCreateSerializer(serializers.Serializer):
 
 
 class ListingAdminSerializer(serializers.ModelSerializer):
+    display_status = serializers.SerializerMethodField()
+
+    def get_display_status(self, obj):
+        return obj.get_display_status()
+
     class Meta:
         model = Listing
         fields = [
@@ -59,6 +64,7 @@ class ListingAdminSerializer(serializers.ModelSerializer):
             "starts_at",
             "ends_at",
             "status",
+            "display_status",
             "current_highest_bid",
             "created_at",
             "updated_at",
@@ -69,4 +75,5 @@ class ListingAdminSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "status",
+            "display_status",
         ]

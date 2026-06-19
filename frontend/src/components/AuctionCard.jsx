@@ -5,6 +5,7 @@ import CountdownTimer from "./CountdownTimer.jsx";
 // Compact listing summary used in the listings grid.
 export default function AuctionCard({ listing }) {
   const imageUrl = listing.image_key ? `/images/${listing.image_key}` : null;
+  const statusLabel = listing.display_status || listing.status;
 
   return (
     <Link to={`/listings/${listing.id}`} style={{ textDecoration: "none", color: "inherit" }}>
@@ -28,6 +29,11 @@ export default function AuctionCard({ listing }) {
           </div>
         )}
         <div className="auction-card-content">
+          {statusLabel ? (
+            <div style={{ fontSize: ".78rem", opacity: 0.7, textTransform: "uppercase", letterSpacing: ".08em" }}>
+              {statusLabel}
+            </div>
+          ) : null}
           <h3>{listing.title}</h3>
           <div className="auction-card-price">
             <span className="label">Current bid:</span>
