@@ -5,7 +5,15 @@ function formatDateTime(value) {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleString();
+  return date.toLocaleString("en-SG", {
+    timeZone: "Asia/Singapore",
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
 
 function formatCurrency(value) {
@@ -55,6 +63,8 @@ export default function AuctionExtendedDetails({ listing }) {
   const currentBid = listing.current_highest_bid || listing.starting_price;
   const description = listing.description || "-";
   const canToggleDescription = description !== "-";
+  const statusLabel = listing.display_status || listing.status || "-";
+  const showStatus = String(statusLabel).toLowerCase() !== "scheduled";
 
   return (
     <section
@@ -124,10 +134,12 @@ export default function AuctionExtendedDetails({ listing }) {
             <strong>{listing.category || "Others"}</strong>
           </div>
 
-          <div style={{ display: "grid", gap: "0.35rem" }}>
-            <span style={{ opacity: 0.7, fontSize: ".9rem" }}>Status</span>
-            <strong>{listing.display_status || listing.status || "-"}</strong>
-          </div>
+          {showStatus ? (
+            <div style={{ display: "grid", gap: "0.35rem" }}>
+              <span style={{ opacity: 0.7, fontSize: ".9rem" }}>Status</span>
+              <strong>{statusLabel}</strong>
+            </div>
+          ) : null}
 
           <div style={{ display: "grid", gap: "0.3rem" }}>
             <div
@@ -184,7 +196,7 @@ export default function AuctionExtendedDetails({ listing }) {
             <div style={DETAIL_ROW_STYLE}>
               <strong>Countdown</strong>
               <div>
-                <CountdownTimer endsAt={listing.ends_at} />
+                <CountdownTimer startsAt={listing.starts_at} endsAt={listing.ends_at} />
               </div>
             </div>
 

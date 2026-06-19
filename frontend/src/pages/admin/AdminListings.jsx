@@ -27,17 +27,44 @@ const inputStyle = {
   fontSize: "14px",
 };
 
-function formatLocalDateTime(value) {
+const SGT_TIME_ZONE = "Asia/Singapore";
+
+function toSingaporeDateTimeInputValue(value) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  const pad = (n) => String(n).padStart(2, "0");
-  const year = date.getFullYear();
-  const month = pad(date.getMonth() + 1);
-  const day = pad(date.getDate());
-  const hours = pad(date.getHours());
-  const minutes = pad(date.getMinutes());
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: SGT_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+
+  const get = (type) => parts.find((part) => part.type === type)?.value || "00";
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
+}
+
+function formatSingaporeDateTime(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("en-SG", {
+    timeZone: SGT_TIME_ZONE,
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+function formatLocalDateTime(value) {
+  return toSingaporeDateTimeInputValue(value);
 }
 
 const actionButtonStyle = {
@@ -179,7 +206,7 @@ export default function AdminListings() {
                           onChange={handleFieldChange("starts_at")}
                           style={inputStyle}
                         />
-                      ) : new Date(listing.starts_at).toLocaleString()}
+                      ) : formatSingaporeDateTime(listing.starts_at)}
                     </td>
                     <td style={cellStyle}>
                       {editingId === listing.id ? (
@@ -189,7 +216,7 @@ export default function AdminListings() {
                           onChange={handleFieldChange("ends_at")}
                           style={inputStyle}
                         />
-                      ) : new Date(listing.ends_at).toLocaleString()}
+                      ) : formatSingaporeDateTime(listing.ends_at)}
                     </td>
                     <td style={cellStyle}>
                       {editingId === listing.id ? (
@@ -236,7 +263,7 @@ export default function AdminListings() {
                           <button
                             type="button"
                             style={actionButtonStyle}
-                            onClick={() => startEditing(listing)}
+                            onClick={() => window.location.assign(`/admin/add-item?edit=${listing.id}`)}
                           >
                             Edit
                           </button>

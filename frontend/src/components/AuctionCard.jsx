@@ -6,6 +6,7 @@ import CountdownTimer from "./CountdownTimer.jsx";
 export default function AuctionCard({ listing }) {
   const imageUrl = listing.image_key ? `/images/${listing.image_key}` : null;
   const statusLabel = listing.display_status || listing.status;
+  const isScheduledLabel = String(statusLabel || "").toLowerCase() === "scheduled";
 
   return (
     <Link to={`/listings/${listing.id}`} style={{ textDecoration: "none", color: "inherit" }}>
@@ -29,7 +30,7 @@ export default function AuctionCard({ listing }) {
           </div>
         )}
         <div className="auction-card-content">
-          {statusLabel ? (
+          {statusLabel && !isScheduledLabel ? (
             <div style={{ fontSize: ".78rem", opacity: 0.7, textTransform: "uppercase", letterSpacing: ".08em" }}>
               {statusLabel}
             </div>
@@ -39,7 +40,7 @@ export default function AuctionCard({ listing }) {
             <span className="label">Current bid:</span>
             <span className="price">${listing.current_highest_bid || listing.starting_price}</span>
           </div>
-          <CountdownTimer endsAt={listing.ends_at} />
+          <CountdownTimer startsAt={listing.starts_at} endsAt={listing.ends_at} preStartDisplay="countdown" />
         </div>
       </div>
     </Link>

@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import AdminLayout from "../../components/admin/AdminLayout.jsx";
-import { createListing, uploadListingImage } from "../../api/auctions.js";
+import { createListing, getListingDetail, updateListing, uploadListingImage } from "../../api/auctions.js";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { CATEGORIES, getCategoryOptions } from "../../config/categories.js";
 
@@ -19,7 +20,36 @@ const SECTION_STYLE = {
   marginBottom: "1.5rem",
 };
 
+const DATE_TIME_STYLE = {
+  background: "rgba(194,161,90,.08)",
+  borderColor: "rgba(194,161,90,.4)",
+};
+
+const SGT_TIME_ZONE = "Asia/Singapore";
+
+function toSingaporeDateTimeInputValue(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: SGT_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+
+  const get = (type) => parts.find((part) => part.type === type)?.value || "00";
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}`;
+}
+
 export default function AdminCreate() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const editingId = searchParams.get("edit");
+  const isEditMode = Boolean(editingId);
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -34,8 +64,53 @@ export default function AdminCreate() {
   });
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [loadingEditData, setLoadingEditData] = useState(false);
   const [message, setMessage] = useState(null);
   const { user, loading } = useAuth();
+  const nowLocal = toSingaporeDateTimeInputValue(new Date());
+  const minEndLocal = form.startTime && form.startTime > nowLocal ? form.startTime : nowLocal;
+
+  function formatLocalDateTime(value) {
+    return toSingaporeDateTimeInputValue(value);
+  }
+
+  useEffect(() => {
+    if (!isEditMode || !editingId) return;
+
+    let cancelled = false;
+    const loadListing = async () => {
+      setLoadingEditData(true);
+      setMessage(null);
+      try {
+        const listing = await getListingDetail(editingId);
+        if (cancelled) return;
+
+        setForm({
+          title: listing.title || "",
+          description: listing.description || "",
+          category: listing.category || "Others",
+          startingPrice: listing.starting_price ? String(listing.starting_price) : "",
+          minimumIncrement: listing.minimum_increment ? String(listing.minimum_increment) : "",
+          startTime: formatLocalDateTime(listing.starts_at),
+          endTime: formatLocalDateTime(listing.ends_at),
+          images: [],
+          imageKey: listing.image_key || "",
+          imageUrl: listing.image_key ? `/images/${listing.image_key}` : "",
+        });
+      } catch (error) {
+        if (!cancelled) {
+          setMessage({ type: "error", text: "Could not load listing details for editing." });
+        }
+      } finally {
+        if (!cancelled) setLoadingEditData(false);
+      }
+    };
+
+    loadListing();
+    return () => {
+      cancelled = true;
+    };
+  }, [editingId, isEditMode]);
 
   const handleChange = (field) => async (event) => {
     if (field === "images" && event.target.files.length) {
@@ -76,11 +151,45 @@ export default function AdminCreate() {
       ? Array.from(event.target.files)
       : event.target.value;
 
+    if (field === "startTime") {
+      setForm((prev) => {
+        const next = { ...prev, startTime: value };
+        if (next.endTime && value && next.endTime < value) {
+          next.endTime = value;
+        }
+        return next;
+      });
+      return;
+    }
+
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    const action = event.nativeEvent?.submitter?.dataset?.action || "create";
+    const saveAsDraft = action === "draft";
+
+    const title = (form.title || "").trim();
+    const startingPrice = (form.startingPrice || "").trim();
+    if (!title || !startingPrice) {
+      setMessage({ type: "error", text: "Name and Starting Price are required to save a draft." });
+      return;
+    }
+
+    if (!saveAsDraft) {
+      const missing = [];
+      if (!(form.description || "").trim()) missing.push("Description");
+      if (!(form.minimumIncrement || "").trim()) missing.push("Minimum Increment");
+      if (!(form.startTime || "").trim()) missing.push("Auction Start");
+      if (!(form.endTime || "").trim()) missing.push("Auction End");
+
+      if (missing.length) {
+        setMessage({ type: "error", text: `Please complete: ${missing.join(", ")}.` });
+        return;
+      }
+    }
+
     setSubmitting(true);
     setMessage(null);
 
@@ -94,15 +203,26 @@ export default function AdminCreate() {
         minimum_increment: form.minimumIncrement.replace(/,/g, ""),
         starts_at: form.startTime,
         ends_at: form.endTime,
+        save_as_draft: saveAsDraft,
       };
 
       // Debug: log payload so we can confirm image_key is being sent
       // (remove console.log in production)
       console.log("Create payload:", payload);
 
-      await createListing(payload);
+      if (isEditMode) {
+        await updateListing(editingId, payload);
+      } else {
+        await createListing(payload);
+      }
 
-      setMessage({ type: "success", text: "Item saved successfully." });
+      setMessage({ type: "success", text: isEditMode ? "Item updated successfully." : (saveAsDraft ? "Draft saved successfully." : "Item created successfully.") });
+
+      if (isEditMode) {
+        navigate("/admin/listings");
+        return;
+      }
+
       setForm({
         title: "",
         description: "",
@@ -121,7 +241,7 @@ export default function AdminCreate() {
       if (error?.response?.status === 403) {
         setMessage({ type: "error", text: "Admin access required." });
       } else if (resp) {
-        let errText = "Could not save item. Please try again.";
+        let errText = saveAsDraft ? "Could not save draft. Please try again." : "Could not create item. Please try again.";
         if (typeof resp === "string") {
           errText = resp;
         } else if (resp.detail) {
@@ -139,7 +259,7 @@ export default function AdminCreate() {
 
         setMessage({ type: "error", text: errText });
       } else {
-        setMessage({ type: "error", text: "Could not save item. Please try again." });
+        setMessage({ type: "error", text: saveAsDraft ? "Could not save draft. Please try again." : "Could not create item. Please try again." });
       }
     } finally {
       setSubmitting(false);
@@ -149,7 +269,7 @@ export default function AdminCreate() {
   return (
     <AdminLayout>
       <p className="admin-eyebrow">SecureBid Admin Panel</p>
-      <h1 className="admin-page-title">Create a new item listing</h1>
+      <h1 className="admin-page-title">{isEditMode ? "Edit item listing" : "Create a new item listing"}</h1>
 
       {/* User feedback banner */}
       {message && (
@@ -168,7 +288,7 @@ export default function AdminCreate() {
         </div>
       )}
 
-      {loading ? (
+      {loading || loadingEditData ? (
         <p>Loading…</p>
       ) : (!user || !user.is_staff) ? (
         <p className="admin-error-text">Admin access required to create listings.</p>
@@ -182,7 +302,7 @@ export default function AdminCreate() {
             </div>
             <div style={{ flex: "0 0 220px", minWidth: 220 }}>
               <label className="eyebrow" style={{ marginBottom: ".45rem", display: "block" }}>Status</label>
-              <div style={{ padding: ".85rem 1rem", borderRadius: 6, background: "rgba(27,26,23,.04)", fontSize: ".84rem", color: "var(--ink)" }}>New</div>
+              <div style={{ padding: ".85rem 1rem", borderRadius: 6, background: "rgba(27,26,23,.04)", fontSize: ".84rem", color: "var(--ink)" }}>{isEditMode ? "Editing" : "New"}</div>
             </div>
           </div>
 
@@ -206,7 +326,6 @@ export default function AdminCreate() {
                 placeholder="Detailed description, provenance and condition notes"
                 value={form.description}
                 onChange={handleChange("description")}
-                required
               />
             </div>
 
@@ -235,7 +354,26 @@ export default function AdminCreate() {
                 multiple
                 onChange={handleChange("images")}
                 disabled={uploading}
+                style={{ display: "none" }}
               />
+              <label
+                htmlFor="images"
+                className="btn-gold"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: "fit-content",
+                  cursor: uploading ? "not-allowed" : "pointer",
+                  opacity: uploading ? 0.6 : 1,
+                  pointerEvents: uploading ? "none" : "auto",
+                }}
+              >
+                {uploading ? "Uploading..." : "Choose files"}
+              </label>
+              <p style={{ marginTop: ".5rem", marginBottom: 0, fontSize: ".9rem", opacity: 0.8 }}>
+                {form.images?.length ? `${form.images.length} file(s) selected` : "No file chosen"}
+              </p>
               {form.imageUrl && (
                 <div style={{ marginTop: ".5rem" }}>
                   <img src={form.imageUrl} alt="Preview" style={{ maxWidth: "200px", maxHeight: "200px", borderRadius: 6 }} />
@@ -271,7 +409,6 @@ export default function AdminCreate() {
                   placeholder="e.g. 500"
                   value={form.minimumIncrement}
                   onChange={handleChange("minimumIncrement")}
-                  required
                 />
               </div>
             </div>
@@ -279,32 +416,55 @@ export default function AdminCreate() {
             <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
               <div className="field">
                 <label htmlFor="startTime">Auction Start</label>
+                <p style={{ margin: 0, fontSize: ".78rem", opacity: 0.7 }}>Timezone: Singapore (SGT)</p>
                 <input
                   id="startTime"
                   type="datetime-local"
                   value={form.startTime}
                   onChange={handleChange("startTime")}
-                  required
+                  min={isEditMode ? undefined : nowLocal}
+                  style={DATE_TIME_STYLE}
                 />
               </div>
 
               <div className="field">
                 <label htmlFor="endTime">Auction End</label>
+                <p style={{ margin: 0, fontSize: ".78rem", opacity: 0.7 }}>Timezone: Singapore (SGT)</p>
                 <input
                   id="endTime"
                   type="datetime-local"
                   value={form.endTime}
                   onChange={handleChange("endTime")}
-                  required
+                  min={isEditMode ? undefined : minEndLocal}
+                  style={DATE_TIME_STYLE}
                 />
               </div>
             </div>
           </div>
         </section>
 
-        <button type="submit" className="btn-gold" disabled={submitting || uploading || !user?.is_staff}>
-          {submitting ? "Saving…" : uploading ? "Uploading…" : "Save item"}
-        </button>
+        <div style={{ display: "flex", gap: ".75rem", flexWrap: "wrap" }}>
+          {!isEditMode && (
+            <button
+              type="submit"
+              data-action="draft"
+              className="btn-gold"
+              disabled={submitting || uploading || !user?.is_staff}
+              style={{ opacity: 0.85, width: "auto", minWidth: 180, flex: "1 1 220px" }}
+            >
+              {submitting ? "Saving..." : uploading ? "Uploading..." : "Save as draft"}
+            </button>
+          )}
+          <button
+            type="submit"
+            data-action="create"
+            className="btn-gold"
+            disabled={submitting || uploading || !user?.is_staff}
+            style={{ width: "auto", minWidth: 180, flex: "1 1 220px" }}
+          >
+            {submitting ? (isEditMode ? "Updating..." : "Creating...") : uploading ? "Uploading..." : (isEditMode ? "Update item" : "Create item")}
+          </button>
+        </div>
       </form>
       )}
     </AdminLayout>

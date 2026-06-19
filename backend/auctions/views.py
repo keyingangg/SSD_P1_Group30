@@ -1,7 +1,10 @@
 """API views for the auctions app."""
+from datetime import timedelta
+from decimal import Decimal
 from uuid import uuid4
 
 from django.core.files.storage import default_storage
+from django.utils import timezone
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -55,23 +58,29 @@ class ListingCreateView(APIView):
         serializer.is_valid(raise_exception=True)
 
         data = serializer.validated_data
+        save_as_draft = data.get("save_as_draft", False)
+        now = timezone.now()
 
         # Normalize image_key: store None when blank to keep DB consistent.
         img_key = data.get("image_key")
         if isinstance(img_key, str) and img_key.strip() == "":
             img_key = None
 
+        starts_at = data.get("starts_at") or now
+        ends_at = data.get("ends_at") or (starts_at + timedelta(days=1))
+        minimum_increment = data.get("minimum_increment") or Decimal("1.00")
+
         listing = Listing.objects.create(
             created_by=request.user,
             title=data["title"],
-            description=data["description"],
+            description=data.get("description", ""),
             image_key=img_key,
             category=data.get("category", "Others"),
             starting_price=data["starting_price"],
-            minimum_increment=data["minimum_increment"],
-            starts_at=data["starts_at"],
-            ends_at=data["ends_at"],
-            status=Listing.determine_status(data["starts_at"], data["ends_at"]),
+            minimum_increment=minimum_increment,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            status="draft" if save_as_draft else Listing.determine_status(starts_at, ends_at),
         )
 
         return Response({"detail": "Listing created.", "id": listing.id, "image_key": listing.image_key}, status=201)
@@ -97,6 +106,7 @@ class ListingUpdateView(APIView):
         data = serializer.validated_data
         listing.title = data["title"]
         listing.description = data["description"]
+        listing.category = data.get("category", listing.category)
         listing.image_key = data.get("image_key", listing.image_key)
         listing.starting_price = data["starting_price"]
         listing.minimum_increment = data["minimum_increment"]

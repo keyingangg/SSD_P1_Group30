@@ -29,15 +29,28 @@ class ListingCreateSerializer(serializers.Serializer):
     """Validate admin listing creation input."""
 
     title = serializers.CharField(max_length=255)
-    description = serializers.CharField()
+    description = serializers.CharField(required=False, allow_blank=True)
     image_key = serializers.CharField(max_length=512, required=False, allow_blank=True)
     category = serializers.CharField(max_length=50, required=False, default="Others")
     starting_price = serializers.DecimalField(max_digits=12, decimal_places=2)
-    minimum_increment = serializers.DecimalField(max_digits=12, decimal_places=2)
-    starts_at = serializers.DateTimeField()
-    ends_at = serializers.DateTimeField()
+    minimum_increment = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
+    starts_at = serializers.DateTimeField(required=False)
+    ends_at = serializers.DateTimeField(required=False)
+    save_as_draft = serializers.BooleanField(required=False, default=False)
 
     def validate(self, data):
+        save_as_draft = data.get("save_as_draft", False)
+
+        if save_as_draft:
+            return data
+
+        required_fields = ["description", "minimum_increment", "starts_at", "ends_at"]
+        missing = [field for field in required_fields if field not in data]
+        if missing:
+            raise serializers.ValidationError(
+                {field: "This field is required." for field in missing}
+            )
+
         if data["ends_at"] <= data["starts_at"]:
             raise serializers.ValidationError(
                 {"ends_at": "Auction end time must be after the start time."}
@@ -46,7 +59,11 @@ class ListingCreateSerializer(serializers.Serializer):
 
 
 class ListingAdminSerializer(serializers.ModelSerializer):
+    status = serializers.SerializerMethodField()
     display_status = serializers.SerializerMethodField()
+
+    def get_status(self, obj):
+        return obj.get_runtime_status()
 
     def get_display_status(self, obj):
         return obj.get_display_status()

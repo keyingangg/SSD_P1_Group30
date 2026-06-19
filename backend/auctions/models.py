@@ -1,6 +1,5 @@
 """Auction listing and bid models for SecureBid."""
 import uuid
-from datetime import timedelta
 
 from django.conf import settings
 from django.db import models
@@ -17,8 +16,6 @@ class Listing(models.Model):
         ("ended", "Ended"),
         ("cancelled", "Cancelled"),
     ]
-
-    OPENING_SOON_WINDOW = timedelta(days=1)
 
     CATEGORY_CHOICES = [
         ("Handbag", "Handbag"),
@@ -103,9 +100,6 @@ class Listing(models.Model):
 
         if runtime_status == "active":
             return "Live Now"
-
-        if self.starts_at and self.starts_at - now <= self.OPENING_SOON_WINDOW:
-            return "Opening Soon"
 
         return "Scheduled"
 

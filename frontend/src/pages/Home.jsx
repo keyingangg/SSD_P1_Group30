@@ -5,7 +5,7 @@ import AuctionCard from "../components/AuctionCard.jsx";
 const CATEGORIES = ["All", "Timepieces", "Handbags", "Jewellery", "Art"];
 
 const SIDEBAR = {
-  Status: ["Live Now", "Opening Soon", "Recently Closed"],
+  Status: ["Live Now", "Scheduled"],
   Category: ["Timepieces", "Handbags & Leather", "Fine Jewellery", "Art & Prints", "Collectibles"],
   Estimate: ["Under S$5,000", "S$5k — S$20k", "S$20k — S$100k", "Over S$100k"],
 };
