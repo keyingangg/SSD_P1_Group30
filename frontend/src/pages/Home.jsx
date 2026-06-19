@@ -7,7 +7,7 @@ const CATEGORIES = ["All", ...getCategoryOptions()];
 
 const SIDEBAR = {
   Status: ["All", "Live Now", "Opening soon"],
-  Category: getCategoryOptions(),
+  Category: ["All", ...getCategoryOptions()],
   Estimate: ["Under S$5,000", "S$5k — S$20k", "S$20k — S$100k", "Over S$100k"],
 };
 
