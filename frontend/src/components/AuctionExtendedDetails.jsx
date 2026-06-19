@@ -196,7 +196,7 @@ export default function AuctionExtendedDetails({ listing }) {
             <div style={DETAIL_ROW_STYLE}>
               <strong>Countdown</strong>
               <div>
-                <CountdownTimer startsAt={listing.starts_at} endsAt={listing.ends_at} />
+                <CountdownTimer startsAt={listing.starts_at} endsAt={listing.ends_at} preStartDisplay="countdown" />
               </div>
             </div>
 
