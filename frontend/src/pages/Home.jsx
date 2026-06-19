@@ -1,73 +1,102 @@
 import { useState, useEffect } from "react";
 import { getListings } from "../api/auctions.js";
 import AuctionCard from "../components/AuctionCard.jsx";
-import { getCategoryOptions } from "../config/categories.js";
 
-const CATEGORIES = ["All", ...getCategoryOptions()];
+const FILTER_TABS = ["All Lots", "Timepieces", "Handbags", "Jewellery", "Art"];
 
-const SIDEBAR = {
-  Status: ["All", "Live Now", "Opening soon"],
-  Category: ["All", ...getCategoryOptions()],
-  Estimate: ["Under S$5,000", "S$5k — S$20k", "S$20k — S$100k", "Over S$100k"],
+const SIDEBAR_GROUPS = {
+  STATUS: {
+    options: ["Live Now", "Opening Soon", "Recently Closed"],
+    activeDefault: "Live Now",
+  },
+  CATEGORY: {
+    options: ["Timepieces", "Handbags & Leather", "Fine Jewellery", "Art & Prints", "Collectibles"],
+    activeDefault: "Timepieces",
+  },
+  ESTIMATE: {
+    options: ["Under S$5,000", "S$5k — S$20k", "S$20k — S$100k", "Over S$100k"],
+    activeDefault: "S$20k — S$100k",
+  },
+  "AUCTION HOUSE": {
+    options: ["Patek Philippe", "Rolex", "Hermès", "Cartier", "Bulgari"],
+    activeDefault: "Rolex",
+  },
 };
 
-const STATUS_FILTER_VALUES = {
-  All: "All",
-  "Live Now": "active",
-  "Opening soon": "scheduled",
-};
+const ITEMS_PER_PAGE = 9;
 
 export default function Home() {
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeCategory, setActiveCategory] = useState("All");
   const [search, setSearch] = useState("");
-  const [sidebarStatus, setSidebarStatus] = useState("All");
-  const [sidebarCategory, setSidebarCategory] = useState("All");
+  const [activeTab, setActiveTab] = useState("All Lots");
+  const [page, setPage] = useState(1);
+  const [sideFilters, setSideFilters] = useState({
+    STATUS: "Live Now",
+    CATEGORY: "Timepieces",
+    ESTIMATE: "S$20k — S$100k",
+    "AUCTION HOUSE": "Rolex",
+  });
 
   useEffect(() => {
     getListings().then(setListings).catch(console.error).finally(() => setLoading(false));
   }, []);
 
-  const visible = listings.filter((l) => {
-    const matchSearch = l.title.toLowerCase().includes(search.toLowerCase());
-    const matchSidebarStatus =
-      sidebarStatus === "All" || String(l.status || "").toLowerCase() === sidebarStatus.toLowerCase();
-    const matchSidebarCategory =
-      sidebarCategory === "All" || String(l.category || "").toLowerCase() === sidebarCategory.toLowerCase();
-    return matchSearch && matchSidebarStatus && matchSidebarCategory;
-  });
+  const visible = listings.filter((l) =>
+    !search || l.title.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const totalPages = Math.max(1, Math.ceil(visible.length / ITEMS_PER_PAGE));
+  const paged = visible.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+
+  function buildPageNums(total, cur) {
+    if (total <= 5) return Array.from({ length: total }, (_, i) => i + 1);
+    const pages = [1, 2, 3];
+    if (!pages.includes(total)) pages.push("…", total);
+    return pages;
+  }
 
   return (
-    <>
-      <div className="cat-header">
-        <p className="cat-eyebrow">Auction Catalogue · {visible.length} Listings</p>
-        <h1 className="cat-title">Auction Catalogue</h1>
+    <div className="cat-wrap">
 
-        <div className="cat-controls">
-          <input
-            className="cat-search"
-            placeholder="Search by brand, item, listing number..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      {/* Page Header */}
+      <div className="cat-page-header">
+        <div className="cat-header-accent" />
+        <div className="cat-header-inner">
+          <p className="cat-header-eyebrow">SEASON XXIII · {visible.length} ACTIVE LOTS</p>
+          <h1 className="cat-header-title">Auction Catalogue</h1>
+        </div>
+      </div>
+
+      {/* Filter Strip */}
+      <div className="cat-filter-strip">
+        <div className="cat-filter-inner">
+          <div className="cat-search-wrap">
+            <svg className="cat-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <circle cx="6.5" cy="6.5" r="5" stroke="#1E1E1E" strokeWidth="1.5" />
+              <path d="M10.5 10.5L14 14" stroke="#1E1E1E" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            <input
+              className="cat-search"
+              placeholder="Search by brand, item, lot number..."
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            />
+          </div>
           <div className="cat-tabs">
-            {CATEGORIES.map((c) => (
+            {FILTER_TABS.map((tab) => (
               <button
-                key={c}
+                key={tab}
                 type="button"
-                className={`cat-tab${activeCategory === c ? " active" : ""}`}
-                onClick={() => {
-                  setActiveCategory(c);
-                  setSidebarCategory(c);
-                }}
+                className={`cat-tab${activeTab === tab ? " active" : ""}`}
+                onClick={() => { setActiveTab(tab); setPage(1); }}
               >
-                {c === "All" ? "All Listings" : c}
+                {tab}
               </button>
             ))}
           </div>
           <select className="cat-sort">
-            <option>Ending soonest</option>
+            <option>Ending soonest ▾</option>
             <option>Highest bid</option>
             <option>Lowest estimate</option>
             <option>Most bids</option>
@@ -75,54 +104,83 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="cat-layout">
+      {/* Body */}
+      <div className="cat-body">
+
         {/* Sidebar */}
         <aside className="cat-sidebar">
-          <p className="cat-sidebar-title" style={{ fontSize: ".72rem", letterSpacing: ".1em", opacity: .4, textTransform: "uppercase", marginBottom: "1.25rem" }}>Refine</p>
-          {Object.entries(SIDEBAR).map(([group, options]) => (
-            <div className="cat-sidebar-section" key={group}>
-              <p className="cat-sidebar-title">{group}</p>
-              {options.map((opt) => (
-                <label className="cat-filter-option" key={opt}>
-                  <input
-                    type="radio"
-                    name={group}
-                    checked={
-                      group === "Category"
-                        ? sidebarCategory === opt
-                        : group === "Status"
-                          ? sidebarStatus === (STATUS_FILTER_VALUES[opt] || opt)
-                          : false
-                    }
-                    onChange={() => {
-                      if (group === "Category") setSidebarCategory(opt);
-                      if (group === "Status") setSidebarStatus(STATUS_FILTER_VALUES[opt] || opt);
-                    }}
-                  />
-                  <span>{opt}</span>
-                </label>
-              ))}
+          <div className="cat-sidebar-accent" />
+          <p className="cat-refine-label">REFINE</p>
+          {Object.entries(SIDEBAR_GROUPS).map(([group, { options, activeDefault }]) => (
+            <div className="cat-sb-group" key={group}>
+              <p className="cat-sb-group-label">{group}</p>
+              <div className="cat-sb-rule" />
+              {options.map((opt) => {
+                const isActive = sideFilters[group] === opt;
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    className={`cat-sb-opt${isActive ? " active" : ""}`}
+                    onClick={() => setSideFilters((f) => ({ ...f, [group]: opt }))}
+                  >
+                    <span className="cat-sb-radio">{isActive ? "●" : "○"}</span>
+                    {opt}
+                  </button>
+                );
+              })}
             </div>
           ))}
         </aside>
 
         {/* Grid */}
-        <div>
+        <div className="cat-grid-wrap">
           <div className="cat-grid">
             {loading ? (
-              <p style={{ padding: "3rem", textAlign: "center", opacity: 0.5 }}>Loading listings…</p>
-            ) : visible.length > 0 ? (
-              visible.map((listing) => (
-                <AuctionCard key={listing.id} listing={listing} />
+              <p className="cat-empty">Loading listings…</p>
+            ) : paged.length > 0 ? (
+              paged.map((listing, i) => (
+                <AuctionCard
+                  key={listing.id}
+                  listing={listing}
+                  index={(page - 1) * ITEMS_PER_PAGE + i + 1}
+                />
               ))
             ) : (
-              <p style={{ padding: "3rem", textAlign: "center", opacity: 0.5 }}>
-                No listings match your search.
-              </p>
+              <p className="cat-empty">No listings match your search.</p>
             )}
           </div>
+
+          {/* Pagination */}
+          {!loading && visible.length > 0 && (
+            <div className="cat-pagination">
+              <div className="cat-pag-rule" />
+              <div className="cat-pag-btns">
+                <button
+                  className="cat-pag-btn"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                >←</button>
+                {buildPageNums(totalPages, page).map((p, i) =>
+                  p === "…"
+                    ? <span key={`e${i}`} className="cat-pag-ellipsis">·</span>
+                    : <button
+                        key={p}
+                        className={`cat-pag-btn${page === p ? " active" : ""}`}
+                        onClick={() => setPage(p)}
+                      >{p}</button>
+                )}
+                <button
+                  className="cat-pag-btn"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                >→</button>
+              </div>
+            </div>
+          )}
         </div>
+
       </div>
-    </>
+    </div>
   );
 }

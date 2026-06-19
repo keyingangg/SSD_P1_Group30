@@ -50,6 +50,7 @@ export default function Navbar() {
       </div>
 
       <div className="nav-right">
+        <span className="nav-user-name">{user?.display_name || user?.email?.split("@")[0] || ""}</span>
         <button
           className="nav-avatar"
           onClick={() => { setDropdownOpen((o) => !o); setConfirmingLogout(false); }}
@@ -97,6 +98,9 @@ export default function Navbar() {
                 <>
                   <Link to="/dashboard" onClick={closeDropdown}>
                     My Dashboard
+                  </Link>
+                  <Link to="/account-settings" onClick={closeDropdown}>
+                    Account Settings
                   </Link>
                   <div className="nav-dropdown-divider" />
                   <button onClick={() => setConfirmingLogout(true)}>Sign Out</button>
