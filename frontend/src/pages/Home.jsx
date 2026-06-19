@@ -2,24 +2,50 @@ import { useState, useEffect } from "react";
 import { getListings } from "../api/auctions.js";
 import AuctionCard from "../components/AuctionCard.jsx";
 
-const FILTER_TABS = ["All Lots", "Timepieces", "Handbags", "Jewellery", "Art"];
+const FILTER_TABS = [
+  "All Lots",
+  "Watches",
+  "Handbag",
+  "Fine Art & Collectibles",
+  "Fashion & Apparel",
+  "Accessories",
+  "Perfumes",
+  "Wines & Spirits",
+  "Home Decor & Furniture",
+  "Others",
+];
+
+const DB_CATEGORIES = [
+  "Handbag",
+  "Watches",
+  "Perfumes",
+  "Fashion & Apparel",
+  "Accessories",
+  "Fine Art & Collectibles",
+  "Wines & Spirits",
+  "Home Decor & Furniture",
+  "Others",
+];
+
+const ESTIMATE_RANGES = [
+  { label: "Under S$5,000",     min: 0,      max: 5000 },
+  { label: "S$5k — S$20k",     min: 5000,   max: 20000 },
+  { label: "S$20k — S$100k",   min: 20000,  max: 100000 },
+  { label: "Over S$100k",       min: 100000, max: Infinity },
+];
 
 const SIDEBAR_GROUPS = {
   STATUS: {
-    options: ["Live Now", "Opening Soon", "Recently Closed"],
-    activeDefault: "Live Now",
+    options: ["Live Now", "Scheduled", "Ended"],
+    activeDefault: null,
   },
   CATEGORY: {
-    options: ["Timepieces", "Handbags & Leather", "Fine Jewellery", "Art & Prints", "Collectibles"],
-    activeDefault: "Timepieces",
+    options: DB_CATEGORIES,
+    activeDefault: null,
   },
   ESTIMATE: {
-    options: ["Under S$5,000", "S$5k — S$20k", "S$20k — S$100k", "Over S$100k"],
-    activeDefault: "S$20k — S$100k",
-  },
-  "AUCTION HOUSE": {
-    options: ["Patek Philippe", "Rolex", "Hermès", "Cartier", "Bulgari"],
-    activeDefault: "Rolex",
+    options: ESTIMATE_RANGES.map((r) => r.label),
+    activeDefault: null,
   },
 };
 
@@ -32,19 +58,37 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState("All Lots");
   const [page, setPage] = useState(1);
   const [sideFilters, setSideFilters] = useState({
-    STATUS: "Live Now",
-    CATEGORY: "Timepieces",
-    ESTIMATE: "S$20k — S$100k",
-    "AUCTION HOUSE": "Rolex",
+    STATUS: null,
+    CATEGORY: null,
+    ESTIMATE: null,
   });
 
   useEffect(() => {
     getListings().then(setListings).catch(console.error).finally(() => setLoading(false));
   }, []);
 
-  const visible = listings.filter((l) =>
-    !search || l.title.toLowerCase().includes(search.toLowerCase())
-  );
+  const visible = listings.filter((l) => {
+    if (search && !l.title.toLowerCase().includes(search.toLowerCase())) return false;
+
+    if (activeTab !== "All Lots" && l.category !== activeTab) return false;
+
+    if (sideFilters.STATUS) {
+      const statusMap = { "Live Now": "active", "Scheduled": "scheduled", "Ended": "ended" };
+      if (l.status !== statusMap[sideFilters.STATUS]) return false;
+    }
+
+    if (sideFilters.CATEGORY && l.category !== sideFilters.CATEGORY) return false;
+
+    if (sideFilters.ESTIMATE) {
+      const range = ESTIMATE_RANGES.find((r) => r.label === sideFilters.ESTIMATE);
+      if (range) {
+        const price = parseFloat(l.current_highest_bid) || parseFloat(l.starting_price) || 0;
+        if (price < range.min || price >= range.max) return false;
+      }
+    }
+
+    return true;
+  });
 
   const totalPages = Math.max(1, Math.ceil(visible.length / ITEMS_PER_PAGE));
   const paged = visible.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
@@ -111,7 +155,7 @@ export default function Home() {
         <aside className="cat-sidebar">
           <div className="cat-sidebar-accent" />
           <p className="cat-refine-label">REFINE</p>
-          {Object.entries(SIDEBAR_GROUPS).map(([group, { options, activeDefault }]) => (
+          {Object.entries(SIDEBAR_GROUPS).map(([group, { options }]) => (
             <div className="cat-sb-group" key={group}>
               <p className="cat-sb-group-label">{group}</p>
               <div className="cat-sb-rule" />
@@ -122,7 +166,7 @@ export default function Home() {
                     key={opt}
                     type="button"
                     className={`cat-sb-opt${isActive ? " active" : ""}`}
-                    onClick={() => setSideFilters((f) => ({ ...f, [group]: opt }))}
+                    onClick={() => { setSideFilters((f) => ({ ...f, [group]: isActive ? null : opt })); setPage(1); }}
                   >
                     <span className="cat-sb-radio">{isActive ? "●" : "○"}</span>
                     {opt}

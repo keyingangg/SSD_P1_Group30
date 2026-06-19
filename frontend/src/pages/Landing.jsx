@@ -55,9 +55,10 @@ export default function Landing() {
     <div className="lp-wrap">
 
       {/* ── Navbar ── */}
+      <div className="lp-nav-outer">
       <header className="lp-nav">
         <div className="lp-nav-logo">
-          <span className="lp-logo-mark">LB</span>
+          <span className="lp-logo-mark">SB</span>
           <span className="lp-logo-text">
             <span className="lp-logo-name">{BRAND.name.toUpperCase()}</span>
             <span className="lp-logo-est">EST. {BRAND.established}</span>
@@ -75,8 +76,10 @@ export default function Landing() {
           <Link to="/register" className="lp-nav-register">Register</Link>
         </div>
       </header>
+      </div>
 
       {/* ── Stats Strip ── */}
+      <div className="lp-stats-outer">
       <div className="lp-stats-strip">
         <div className="lp-stat">
           <div className="lp-stat-value">1,240+</div>
@@ -97,6 +100,7 @@ export default function Landing() {
           <div className="lp-stat-value">100%</div>
           <div className="lp-stat-label">Provenance Verified</div>
         </div>
+      </div>
       </div>
 
       {/* ── Hero ── */}
@@ -292,7 +296,7 @@ export default function Landing() {
       <div className="lp-quote">
         <span className="lp-quote-mark">"</span>
         <p className="lp-quote-text">
-          LuxBid gave me the confidence to bid on a S$120,000 Patek Philippe. The provenance
+          SecureBid gave me the confidence to bid on a S$120,000 Patek Philippe. The provenance
           documentation and real-time bidding made the entire experience completely transparent.
         </p>
         <p className="lp-quote-attr">— Wei Liang T., Verified Collector · Singapore</p>
@@ -316,7 +320,7 @@ export default function Landing() {
         <div className="lp-footer-inner">
           <div className="lp-footer-brand">
             <div className="lp-footer-logo">
-              <span className="lp-logo-mark sm">LB</span>
+              <span className="lp-logo-mark sm">SB</span>
               <span className="lp-logo-name sm">{BRAND.name.toUpperCase()}</span>
             </div>
             <p className="lp-footer-tag1">Exclusive Auctions for Discerning Collectors</p>
@@ -324,7 +328,7 @@ export default function Landing() {
           </div>
           {[
             { heading: "Platform", links: ["Browse Auctions", "Private Sales", "How It Works", "Provenance Policy"] },
-            { heading: "Company", links: ["About LuxBid", "Careers", "Press Room", "Contact Us"] },
+            { heading: "Company", links: ["About SecureBid", "Careers", "Press Room", "Contact Us"] },
             { heading: "Legal", links: ["Terms of Service", "Privacy Policy", "Cookie Policy", "PDPA Compliance"] },
           ].map((col) => (
             <div className="lp-footer-col" key={col.heading}>
@@ -337,7 +341,7 @@ export default function Landing() {
           ))}
         </div>
         <div className="lp-footer-bottom">
-          <span>©2024 LuxBid Pte. Ltd. All rights reserved.</span>
+          <span>©2024 SecureBid Pte. Ltd. All rights reserved.</span>
           <span>SSL Secured · PDPA Compliant · PCI DSS</span>
         </div>
       </footer>
