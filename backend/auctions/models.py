@@ -1,10 +1,8 @@
 """Auction listing and bid models for SecureBid."""
 import uuid
-from datetime import timedelta
 
 from django.conf import settings
 from django.db import models
-from django.utils import timezone
 
 
 class Listing(models.Model):
@@ -14,11 +12,9 @@ class Listing(models.Model):
         ("draft", "Draft"),
         ("scheduled", "Scheduled"),
         ("active", "Active"),
-        ("ended", "Ended"),
+        ("closed", "Closed"),
         ("cancelled", "Cancelled"),
     ]
-
-    OPENING_SOON_WINDOW = timedelta(days=1)
 
     CATEGORY_CHOICES = [
         ("Handbag", "Handbag"),
@@ -69,50 +65,6 @@ class Listing(models.Model):
 
     class Meta:
         db_table = "listings"
-
-    @classmethod
-    def determine_status(cls, starts_at, ends_at, now=None):
-        now = now or timezone.now()
-
-        if ends_at and now >= ends_at:
-            return "ended"
-        if starts_at and now >= starts_at:
-            return "active"
-        return "scheduled"
-
-    def get_runtime_status(self, now=None):
-        now = now or timezone.now()
-
-        if self.status in {"draft", "cancelled"}:
-            return self.status
-
-        return self.determine_status(self.starts_at, self.ends_at, now=now)
-
-    def get_display_status(self, now=None):
-        now = now or timezone.now()
-
-        runtime_status = self.get_runtime_status(now=now)
-
-        if runtime_status == "draft":
-            return "Draft"
-        if runtime_status == "cancelled":
-            return "Cancelled"
-
-        if runtime_status == "ended":
-            return "Ended"
-
-        if runtime_status == "active":
-            return "Live Now"
-
-        if self.starts_at and self.starts_at - now <= self.OPENING_SOON_WINDOW:
-            return "Opening Soon"
-
-        return "Scheduled"
-
-    def save(self, *args, **kwargs):
-        if self.status not in {"draft", "cancelled"}:
-            self.status = self.determine_status(self.starts_at, self.ends_at)
-        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.title

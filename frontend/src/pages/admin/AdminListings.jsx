@@ -211,7 +211,7 @@ export default function AdminListings() {
                         />
                       ) : listing.minimum_increment}
                     </td>
-                    <td style={cellStyle}>{listing.display_status || listing.status}</td>
+                    <td style={cellStyle}>{listing.status}</td>
                     <td style={cellStyle}>
                       {editingId === listing.id ? (
                         <div style={{ display: "flex", gap: ".5rem", flexWrap: "wrap" }}>
