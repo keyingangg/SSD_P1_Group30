@@ -5,13 +5,21 @@ from uuid import uuid4
 
 from django.core.files.storage import default_storage
 from django.utils import timezone
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser
 
+from accounts.permissions import IsAdminUser, IsEmailVerified
+from core.audit import log_action
 from .models import Listing
-from .serializers import ListingAdminSerializer, ListingCreateSerializer
+from .serializers import (
+    BidSerializer,
+    BidSubmitSerializer,
+    ListingAdminSerializer,
+    ListingCreateSerializer,
+    ListingSerializer,
+)
 
 
 class ListingListView(APIView):
@@ -22,8 +30,8 @@ class ListingListView(APIView):
     def get(self, request):
         queryset = Listing.objects.all().order_by("-starts_at")
         if not request.user.is_staff:
-            queryset = queryset.exclude(status__in=["draft", "ended", "cancelled"])
-        serializer = ListingAdminSerializer(queryset, many=True)
+            queryset = queryset.exclude(status__in=["draft", "scheduled", "ended", "cancelled"])
+        serializer = ListingSerializer(queryset, many=True)
         return Response(serializer.data)
 
 
@@ -38,21 +46,20 @@ class ListingDetailView(APIView):
         except Listing.DoesNotExist:
             return Response({"detail": "Listing not found."}, status=404)
 
-        if not request.user.is_staff and listing.status in {"draft", "ended", "cancelled"}:
+        if not request.user.is_staff and listing.status in {"draft", "scheduled", "ended", "cancelled"}:
             return Response({"detail": "Listing not found."}, status=404)
 
-        serializer = ListingAdminSerializer(listing)
+        serializer = ListingSerializer(listing)
         return Response(serializer.data)
 
 
 class ListingCreateView(APIView):
     """Create a new listing (admin only)."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
+    staff_only = True
 
     def post(self, request):
-        if not request.user.is_staff:
-            return Response({"detail": "Admin access required."}, status=403)
 
         serializer = ListingCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -89,11 +96,10 @@ class ListingCreateView(APIView):
 class ListingUpdateView(APIView):
     """Update an existing listing (admin only)."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
+    staff_only = True
 
     def patch(self, request, listing_id):
-        if not request.user.is_staff:
-            return Response({"detail": "Admin access required."}, status=403)
 
         try:
             listing = Listing.objects.get(pk=listing_id)
@@ -122,11 +128,10 @@ class ListingUpdateView(APIView):
 class ListingDeleteView(APIView):
     """Delete a listing (admin only)."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
+    staff_only = True
 
     def delete(self, request, listing_id):
-        if not request.user.is_staff:
-            return Response({"detail": "Admin access required."}, status=403)
 
         try:
             listing = Listing.objects.get(pk=listing_id)
@@ -140,7 +145,7 @@ class ListingDeleteView(APIView):
 class BidSubmitView(APIView):
     """Submit a bid on an active auction (authenticated + verified)."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsEmailVerified]
 
     def post(self, request, listing_id):
         # TODO: delegate to bid_engine.submit_bid with full validation.
@@ -150,22 +155,24 @@ class BidSubmitView(APIView):
 class UserBidHistoryView(APIView):
     """List the authenticated user's own bid history."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsEmailVerified]
 
     def get(self, request):
-        # TODO: return bids scoped to request.user.
-        return Response({"detail": "Not implemented."}, status=501)
+        from .models import Bid
+
+        bids = Bid.objects.filter(bidder=request.user).order_by("-submitted_at")
+        serializer = BidSerializer(bids, many=True)
+        return Response(serializer.data)
 
 
 class ListingImageUploadView(APIView):
     """Upload a listing image (authenticated, admin only)."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
+    staff_only = True
     parser_classes = [MultiPartParser]
 
     def post(self, request):
-        if not request.user.is_staff:
-            return Response({"detail": "Admin access required."}, status=403)
 
         f = request.FILES.get("file")
         if not f:

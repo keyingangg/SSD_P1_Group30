@@ -57,6 +57,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "core.middleware.RBACMiddleware",
     # core.middleware.SecurityHeadersMiddleware,  # TODO: enable custom security headers
     # django-axes must be the last authentication-related middleware.
     "axes.middleware.AxesMiddleware",
@@ -124,6 +125,10 @@ AUTH_PASSWORD_VALIDATORS = [
 # --------------------------------------------------------------------------
 # Database (Supabase PostgreSQL over TLS)
 # --------------------------------------------------------------------------
+# The backend must connect using a dedicated least-privilege role, not
+# Supabase's service_role key. Set DB_USER to the restricted role name
+# (for example, securebid_app) and never expose the service_role key in
+# the Django backend environment.
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',

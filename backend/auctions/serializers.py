@@ -1,28 +1,56 @@
 """Serializers for the auctions app."""
 from rest_framework import serializers
 
-from .models import Listing
+from .models import Bid, Listing
 
 
-class ListingSerializer(serializers.Serializer):
+class ListingSerializer(serializers.ModelSerializer):
     """Serialize a listing for public/detail views (no bidder identities)."""
 
-    # TODO: expose safe listing fields, anonymised highest bid.
-    pass
+    class Meta:
+        model = Listing
+        fields = [
+            "id",
+            "title",
+            "description",
+            "image_key",
+            "category",
+            "starting_price",
+            "minimum_increment",
+            "starts_at",
+            "ends_at",
+            "status",
+            "current_highest_bid",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
 
 
-class BidSerializer(serializers.Serializer):
+class BidSerializer(serializers.ModelSerializer):
     """Serialize a bid for display using only the anonymised identifier."""
 
-    # TODO: expose anonymous_identifier, amount, submitted_at.
-    pass
+    class Meta:
+        model = Bid
+        fields = [
+            "id",
+            "anonymous_identifier",
+            "amount",
+            "submitted_at",
+            "is_winning",
+        ]
+        read_only_fields = fields
 
 
 class BidSubmitSerializer(serializers.Serializer):
     """Validate an incoming bid submission (amount only)."""
 
-    # TODO: define amount field; all validation re-checked server-side.
-    pass
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+
+    def validate_amount(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Bid amount must be greater than zero.")
+        return value
 
 
 class ListingCreateSerializer(serializers.Serializer):

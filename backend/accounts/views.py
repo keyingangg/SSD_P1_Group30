@@ -25,6 +25,8 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.permissions import IsAdminUser, IsEmailVerified
+
 logger = logging.getLogger("securebid")
 
 from .emails import (
@@ -302,7 +304,7 @@ class LogoutView(APIView):
 class UserProfileView(APIView):
     """Read (and later update) the authenticated user's own profile."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsEmailVerified]
 
     def get(self, request):
         return Response(UserProfileSerializer(request.user).data, status=200)
@@ -399,7 +401,7 @@ class PasswordResetConfirmView(APIView):
 class PasswordChangeView(APIView):
     """Allow an authenticated user to change their password."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsEmailVerified]
 
     def post(self, request):
         current_password = request.data.get("current_password")
@@ -437,11 +439,10 @@ class StaffInviteView(APIView):
     password when they accept the link.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
+    staff_only = True
 
     def post(self, request):
-        if not request.user.is_staff:
-            return Response({"detail": "Admin access required."}, status=403)
 
         serializer = StaffInviteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -453,6 +454,7 @@ class StaffInviteView(APIView):
                 status=400,
             )
 
+        user = None
         try:
             user = User.objects.create_user(
                 email=email,
@@ -464,9 +466,23 @@ class StaffInviteView(APIView):
             )
             raw_token = generate_staff_invite_token(user, invited_by=request.user)
             send_invite_email(user, raw_token, invited_by=request.user)
+
+            LogEntry.objects.log_create(
+                instance=user,
+                action=LogEntry.Action.CREATE,
+                changes={
+                    "event": "STAFF_INVITE",
+                    "invited_by": request.user.email,
+                    "invited_by_id": str(request.user.id),
+                    "staff_user_email": user.email,
+                    "staff_user_id": str(user.id),
+                },
+                actor=request.user,
+            )
         except (BadHeaderError, smtplib.SMTPException, OSError) as exc:
             logger.error("Failed to send staff invite to %s: %s", email, exc)
-            user.delete()
+            if user is not None:
+                user.delete()
             return Response(
                 {"detail": "Could not send the invitation email. Please try again."},
                 status=503,
@@ -560,12 +576,10 @@ class DeleteAccountView(APIView):
 class AdminUserListView(APIView):
     """Return all user accounts for the admin panel (staff only)."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
+    staff_only = True
 
     def get(self, request):
-        if not request.user.is_staff:
-            return Response({"detail": "Admin access required."}, status=403)
-
         qs = User.objects.all().order_by("-created_at")
         serializer = AdminUserListSerializer(qs, many=True)
         return Response(serializer.data)
@@ -579,7 +593,8 @@ class AdminUserDetailView(APIView):
     - Cannot act on a superuser account (superusers are managed via Django shell).
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
+    staff_only = True
 
     def _get_target(self, request, user_id):
         """Return (user, error_response) — one of the two will be None."""
