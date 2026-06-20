@@ -30,6 +30,13 @@ urlpatterns = [
     ),
 
     path("delete/", views.DeleteAccountView.as_view(), name="delete-account"),
+
+    # MFA / TOTP (SFR-02b)
+    path("mfa/status/", views.MFAStatusView.as_view(), name="mfa-status"),
+    path("mfa/enrol/", views.MFAEnrolView.as_view(), name="mfa-enrol"),
+    path("mfa/enrol/confirm/", views.MFAEnrolConfirmView.as_view(), name="mfa-enrol-confirm"),
+    path("mfa/unenrol/", views.MFAUnenrolView.as_view(), name="mfa-unenrol"),
+    path("mfa/verify-login/", views.MFALoginVerifyView.as_view(), name="mfa-verify-login"),
     path("staff/invite/", views.StaffInviteView.as_view(), name="staff-invite"),
     path("staff/accept-invite/", views.AcceptInviteView.as_view(), name="accept-invite"),
     path("admin/users/", views.AdminUserListView.as_view(), name="admin-user-list"),

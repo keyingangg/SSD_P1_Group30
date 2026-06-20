@@ -12,6 +12,7 @@ import ForgotPassword from "./pages/ForgotPassword.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 import AcceptInvite from "./pages/AcceptInvite.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
+import AccountSettings from "./pages/AccountSettings.jsx";
 import Checkout from "./pages/Checkout.jsx";
 import AdminOverview from "./pages/admin/AdminOverview.jsx";
 import AdminListings from "./pages/admin/AdminListings.jsx";
@@ -45,6 +46,14 @@ export default function App() {
           element={
             <ProtectedRoute>
               <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/account-settings"
+          element={
+            <ProtectedRoute>
+              <AccountSettings />
             </ProtectedRoute>
           }
         />

@@ -1,6 +1,6 @@
 import { BRAND } from "../config/brand.js";
 
-// Brand mark: gold "LB" tile + wordmark + established year.
+// Brand mark: gold "SB" tile + wordmark + established year.
 export default function Logo() {
   return (
     <div className="logo">

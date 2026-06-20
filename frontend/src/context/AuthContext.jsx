@@ -31,9 +31,12 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = async (email, password) => {
-    const me = await loginUser({ email, password });
-    setUser(me);
-    return me;
+    const data = await loginUser({ email, password });
+    // If the server requires a TOTP code, don't set user yet — Login.jsx
+    // will handle the second step via verifyMFALogin().
+    if (data.mfa_required) return data;
+    setUser(data);
+    return data;
   };
 
   const logout = async () => {

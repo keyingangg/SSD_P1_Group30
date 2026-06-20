@@ -39,6 +39,8 @@ INSTALLED_APPS = [
     "channels",
     "axes",
     "auditlog",
+    "django_otp",
+    "django_otp.plugins.otp_totp",
     # Local apps
     "accounts.apps.AccountsConfig",
     "auctions",
@@ -243,3 +245,8 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# --------------------------------------------------------------------------
+# django-otp / TOTP (SFR-02b)
+# --------------------------------------------------------------------------
+OTP_TOTP_ISSUER = os.environ.get("SITE_NAME", "SecureBid")

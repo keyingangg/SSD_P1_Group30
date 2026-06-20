@@ -1,47 +1,63 @@
 import { Link } from "react-router-dom";
-
 import CountdownTimer from "./CountdownTimer.jsx";
 
-// Compact listing summary used in the listings grid.
-export default function AuctionCard({ listing }) {
+const SGD = (n) => n != null ? `S$${Number(n).toLocaleString()}` : null;
+
+function lotNum(id) {
+  return "LOT " + String(id).padStart(3, "0");
+}
+
+export default function AuctionCard({ listing, index }) {
   const imageUrl = listing.image_key ? `/images/${listing.image_key}` : null;
-  const statusLabel = listing.display_status || listing.status;
-  const isScheduledLabel = String(statusLabel || "").toLowerCase() === "scheduled";
+  const isLive = String(listing.display_status || listing.status || "").toLowerCase() === "active";
+  const bid = listing.current_highest_bid || listing.starting_price;
+  const house = listing.brand || listing.house || listing.category || "";
 
   return (
-    <Link to={`/listings/${listing.id}`} style={{ textDecoration: "none", color: "inherit" }}>
-      <div className="auction-card">
-        {imageUrl && (
-          <div
-            className="auction-card-image"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              overflow: "hidden",
-              minHeight: 80,
-            }}
-          >
-            <img
-              src={imageUrl}
-              alt={listing.title}
-              style={{ maxWidth: "100%", height: "auto", objectFit: "contain" }}
-            />
-          </div>
-        )}
-        <div className="auction-card-content">
-          {statusLabel && !isScheduledLabel ? (
-            <div style={{ fontSize: ".78rem", opacity: 0.7, textTransform: "uppercase", letterSpacing: ".08em" }}>
-              {statusLabel}
-            </div>
-          ) : null}
-          <h3>{listing.title}</h3>
-          <div className="auction-card-price">
-            <span className="label">Current bid:</span>
-            <span className="price">${listing.current_highest_bid || listing.starting_price}</span>
-          </div>
-          <CountdownTimer startsAt={listing.starts_at} endsAt={listing.ends_at} preStartDisplay="countdown" />
+    <Link to={`/listings/${listing.id}`} className="ac-card-link">
+      <div className="ac-card">
+
+        {/* Image */}
+        <div className="ac-img-wrap">
+          {imageUrl
+            ? <img src={imageUrl} alt={listing.title} className="ac-img" />
+            : <div className="ac-img ac-img-placeholder" />
+          }
+          <span className="ac-lot-badge">{lotNum(index ?? listing.id)}</span>
+          {isLive && (
+            <span className="ac-live-badge">
+              <span className="ac-live-dot" />LIVE
+            </span>
+          )}
         </div>
+
+        {/* Body */}
+        <div className="ac-body">
+          <p className="ac-house">{house.toUpperCase()}</p>
+          <h3 className="ac-title">{listing.title}</h3>
+          {(listing.estimate_low || listing.estimate_high) && (
+            <p className="ac-estimate">
+              Est. {SGD(listing.estimate_low)} — {SGD(listing.estimate_high)}
+            </p>
+          )}
+          <div className="ac-rule" />
+          <div className="ac-bid-row">
+            <div>
+              <p className="ac-bid">{SGD(bid)}</p>
+              <p className="ac-bid-label">current bid</p>
+            </div>
+            <div className="ac-time-col">
+              <CountdownTimer
+                startsAt={listing.starts_at}
+                endsAt={listing.ends_at}
+                preStartDisplay="countdown"
+              />
+              <p className="ac-bid-label">remaining</p>
+            </div>
+          </div>
+          <button className="ac-btn">View Lot &amp; Bid</button>
+        </div>
+
       </div>
     </Link>
   );
