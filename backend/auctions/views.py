@@ -10,7 +10,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser
 
-from accounts.permissions import IsAdminUser, IsEmailVerified
+from accounts.permissions import IsAdminUser, IsEmailVerified, IsEmailVerifiedSilent
 from core.audit import log_action
 from .models import Listing
 from .serializers import (
@@ -30,7 +30,7 @@ class ListingListView(APIView):
     def get(self, request):
         queryset = Listing.objects.all().order_by("-starts_at")
         if not request.user.is_staff:
-            queryset = queryset.exclude(status__in=["draft", "scheduled", "ended", "cancelled"])
+            queryset = queryset.exclude(status__in=["draft", "ended", "cancelled"])
         serializer = ListingSerializer(queryset, many=True)
         return Response(serializer.data)
 
@@ -46,7 +46,7 @@ class ListingDetailView(APIView):
         except Listing.DoesNotExist:
             return Response({"detail": "Listing not found."}, status=404)
 
-        if not request.user.is_staff and listing.status in {"draft", "scheduled", "ended", "cancelled"}:
+        if not request.user.is_staff and listing.status in {"draft", "ended", "cancelled"}:
             return Response({"detail": "Listing not found."}, status=404)
 
         serializer = ListingSerializer(listing)
@@ -155,7 +155,7 @@ class BidSubmitView(APIView):
 class UserBidHistoryView(APIView):
     """List the authenticated user's own bid history."""
 
-    permission_classes = [IsEmailVerified]
+    permission_classes = [IsEmailVerifiedSilent]
 
     def get(self, request):
         from .models import Bid
