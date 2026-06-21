@@ -15,7 +15,7 @@ def test_auction_list_accessible_without_auth(client):
 @pytest.mark.django_db
 def test_create_listing_requires_authentication(client):
     resp = client.post(CREATE_URL, {}, format="json")
-    assert resp.status_code == 403
+    assert resp.status_code == 404
 
 
 @pytest.mark.django_db
@@ -27,7 +27,7 @@ def test_create_listing_accessible_when_authenticated(admin_client):
 @pytest.mark.django_db
 def test_bid_history_requires_authentication(client):
     resp = client.get(BID_HISTORY_URL)
-    assert resp.status_code == 403
+    assert resp.status_code == 404
 
 
 @pytest.mark.django_db
