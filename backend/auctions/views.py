@@ -3,7 +3,6 @@ from datetime import timedelta
 from decimal import Decimal
 from uuid import uuid4
 
-from django.core.files.storage import default_storage
 from django.utils import timezone
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -184,9 +183,10 @@ class ListingImageUploadView(APIView):
         if not f.content_type.startswith("image/"):
             return Response({"detail": "Invalid file type (must be image)."}, status=400)
 
-        # Save with unique name
+        # Upload to Supabase Storage so the file is accessible in all environments.
+        from core.storage import upload_file, get_public_url
         name = f"listings/{uuid4().hex}_{f.name}"
-        saved_name = default_storage.save(name, f)
-        relative_url = default_storage.url(saved_name)
+        upload_file(name, f.read(), content_type=f.content_type)
+        url = get_public_url(name)
 
-        return Response({"key": saved_name, "url": relative_url}, status=201)
+        return Response({"key": url, "url": url}, status=201)
