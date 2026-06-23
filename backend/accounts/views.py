@@ -35,6 +35,7 @@ from .emails import (
     send_password_reset_email,
     send_verification_email,
 )
+from .password import is_password_breached
 
 from .models import (
     AccountLockoutProfile,
@@ -404,8 +405,8 @@ class PasswordChangeView(APIView):
     permission_classes = [IsEmailVerified]
 
     def post(self, request):
-        current_password = request.data.get("current_password")
-        new_password = request.data.get("new_password")
+        current_password = request.data.get("current_password", "")
+        new_password = request.data.get("new_password", "")
 
         if not current_password or not new_password:
             return Response(
@@ -414,15 +415,34 @@ class PasswordChangeView(APIView):
             )
 
         if not request.user.check_password(current_password):
+            user_login_failed.send(
+                sender=request.user.__class__,
+                credentials={"username": request.user.email},
+                request=request,
+            )
+            return Response({"detail": "Current password is incorrect."}, status=400)
+
+        if len(new_password) < 12 or len(new_password) > 128:
             return Response(
-                {"detail": "Current password is incorrect."},
+                {"detail": "New password must be between 12 and 128 characters."},
+                status=400,
+            )
+
+        if is_password_breached(new_password):
+            return Response(
+                {
+                    "detail": "This password has appeared in a known data breach. "
+                    "Please choose a different one."
+                },
                 status=400,
             )
 
         request.user.set_password(new_password)
         request.user.save(update_fields=["password"])
 
-        # Invalidate all active sessions across all devices.
+        # Flush current session properly so Django's session middleware does not
+        # error trying to save a deleted session row, then clear all other devices.
+        request.session.flush()
         invalidate_all_user_sessions(request.user)
 
         return Response(
@@ -549,8 +569,24 @@ class DeleteAccountView(APIView):
 
     def post(self, request):
         user = request.user
-        device = TOTPDevice.objects.filter(user=user, confirmed=True).first()
 
+        # Step 1: require current password re-entry (SFR-05a).
+        current_password = request.data.get("current_password", "")
+        if not current_password:
+            return Response(
+                {"detail": "Your current password is required to delete your account."},
+                status=400,
+            )
+        if not user.check_password(current_password):
+            user_login_failed.send(
+                sender=user.__class__,
+                credentials={"username": user.email},
+                request=request,
+            )
+            return Response({"detail": "Invalid password."}, status=400)
+
+        # Step 2: if MFA is enrolled, also require a valid TOTP code (SFR-05a).
+        device = TOTPDevice.objects.filter(user=user, confirmed=True).first()
         if device:
             otp_code = request.data.get("otp_code", "").replace(" ", "")
             if not otp_code:
@@ -567,7 +603,9 @@ class DeleteAccountView(APIView):
                 return Response({"detail": "Invalid MFA code."}, status=400)
 
         email = user.email
-        invalidate_all_user_sessions(user)
+        # Flush the current session properly so Django's session middleware
+        # does not try to save a session that no longer exists after deletion.
+        request.session.flush()
         user.delete()
         logger.info("User %s deleted their own account", email)
         return Response({"detail": "Your account has been deleted."}, status=200)

@@ -1,10 +1,31 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
-import { getMFAStatus, startMFAEnrol, confirmMFAEnrol, unenrolMFA } from "../api/auth.js";
+import { getMFAStatus, startMFAEnrol, confirmMFAEnrol, unenrolMFA, deleteAccount, changePassword } from "../api/auth.js";
+import { useAuth } from "../context/AuthContext.jsx";
 
 export default function AccountSettings() {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+
   const [enrolled, setEnrolled] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Password change state
+  const [pwStep, setPwStep]           = useState("idle"); // "idle" | "form"
+  const [currentPw, setCurrentPw]     = useState("");
+  const [newPw, setNewPw]             = useState("");
+  const [confirmPw, setConfirmPw]     = useState("");
+  const [pwSubmitting, setPwSubmitting] = useState(false);
+  const [pwMessage, setPwMessage]     = useState(null); // { type, text }
+
+  // Delete account state
+  const [deleteStep, setDeleteStep]       = useState("idle"); // "idle" | "confirm"
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteOtp, setDeleteOtp]         = useState("");
+  const [deleteNeedsMfa, setDeleteNeedsMfa] = useState(false);
+  const [deleting, setDeleting]           = useState(false);
+  const [deleteError, setDeleteError]     = useState("");
 
   // Enrolment flow state
   const [enrolStep, setEnrolStep] = useState("idle"); // "idle" | "scan" | "confirm" | "done"
@@ -71,6 +92,65 @@ export default function AccountSettings() {
       });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handlePasswordChange = async (e) => {
+    e.preventDefault();
+    setPwMessage(null);
+
+    if (newPw.length < 12) {
+      setPwMessage({ type: "error", text: "New password must be at least 12 characters." });
+      return;
+    }
+    if (newPw !== confirmPw) {
+      setPwMessage({ type: "error", text: "Passwords do not match." });
+      return;
+    }
+    if (newPw === currentPw) {
+      setPwMessage({ type: "error", text: "New password must differ from your current password." });
+      return;
+    }
+
+    setPwSubmitting(true);
+    try {
+      await changePassword({ currentPassword: currentPw, newPassword: newPw });
+      // All sessions invalidated server-side — log out and send to login.
+      await logout();
+      navigate("/login", { replace: true });
+    } catch (err) {
+      setPwMessage({
+        type: "error",
+        text: err?.response?.data?.detail || "Could not change password. Please try again.",
+      });
+    } finally {
+      setPwSubmitting(false);
+    }
+  };
+
+  const handleDeleteSubmit = async (e) => {
+    e.preventDefault();
+    setDeleteError("");
+    setDeleting(true);
+    try {
+      await deleteAccount({
+        currentPassword: deletePassword,
+        otpCode: deleteNeedsMfa ? deleteOtp : undefined,
+      });
+      // Await logout() so user state is cleared before navigating — otherwise
+      // Landing.jsx sees the user as still logged in and redirects to /auctions.
+      await logout();
+      navigate("/", { replace: true });
+    } catch (err) {
+      const detail = err?.response?.data?.detail || "Could not delete account. Please try again.";
+      const needsMfa = err?.response?.data?.mfa_required === true;
+      if (needsMfa) {
+        setDeleteNeedsMfa(true);
+        setDeleteError("Please enter your authenticator code to confirm deletion.");
+      } else {
+        setDeleteError(detail);
+      }
+      setDeleting(false);
     }
   };
 
@@ -212,6 +292,187 @@ export default function AccountSettings() {
               </div>
             </form>
           </div>
+        )}
+      </section>
+
+      {/* ── Change Password ───────────────────────────────────────────── */}
+      <section style={{ border: "1px solid rgba(27,26,23,.15)", borderRadius: 8, padding: "1.5rem", marginTop: "1.5rem" }}>
+        <h2 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: ".25rem" }}>
+          Change Password
+        </h2>
+        <p style={{ fontSize: ".85rem", color: "#666", marginBottom: "1.25rem" }}>
+          Update your password. You will be signed out of all devices after changing.
+        </p>
+
+        {pwStep === "idle" && (
+          <button
+            onClick={() => setPwStep("form")}
+            className="btn-gold"
+            style={{ fontSize: ".85rem", padding: ".5rem 1.1rem" }}
+          >
+            Change Password
+          </button>
+        )}
+
+        {pwStep === "form" && (
+          <form onSubmit={handlePasswordChange}>
+            <div className="field">
+              <label htmlFor="current-pw" style={{ fontSize: ".85rem" }}>Current Password</label>
+              <input
+                id="current-pw"
+                type="password"
+                autoComplete="current-password"
+                placeholder="Enter your current password"
+                value={currentPw}
+                onChange={(e) => setCurrentPw(e.target.value)}
+                required
+                autoFocus
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="new-pw" style={{ fontSize: ".85rem" }}>New Password</label>
+              <input
+                id="new-pw"
+                type="password"
+                autoComplete="new-password"
+                placeholder="12+ characters"
+                value={newPw}
+                onChange={(e) => setNewPw(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="field">
+              <label htmlFor="confirm-pw" style={{ fontSize: ".85rem" }}>Confirm New Password</label>
+              <input
+                id="confirm-pw"
+                type="password"
+                autoComplete="new-password"
+                placeholder="Repeat new password"
+                value={confirmPw}
+                onChange={(e) => setConfirmPw(e.target.value)}
+                required
+              />
+            </div>
+
+            {pwMessage && (
+              <p style={{
+                fontSize: ".85rem", padding: ".6rem .9rem", borderRadius: 4, marginBottom: "1rem",
+                background: pwMessage.type === "success" ? "#edfdf1" : "#fdf2f2",
+                color: pwMessage.type === "success" ? "#1a7f3c" : "#b91c1c",
+                border: `1px solid ${pwMessage.type === "success" ? "#a7f3c3" : "#fecaca"}`,
+              }}>
+                {pwMessage.text}
+              </p>
+            )}
+
+            <div style={{ display: "flex", gap: ".75rem", alignItems: "center" }}>
+              <button
+                type="submit"
+                disabled={pwSubmitting || !currentPw || !newPw || !confirmPw}
+                className="btn-gold"
+                style={{ fontSize: ".85rem", padding: ".5rem 1.1rem" }}
+              >
+                {pwSubmitting ? "Updating…" : "Update Password"}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setPwStep("idle"); setCurrentPw(""); setNewPw(""); setConfirmPw(""); setPwMessage(null); }}
+                style={{ background: "none", border: "none", fontSize: ".82rem", color: "#666", cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+      </section>
+
+      {/* ── Delete Account ────────────────────────────────────────────── */}
+      <section style={{ border: "1px solid #fecaca", borderRadius: 8, padding: "1.5rem", marginTop: "1.5rem" }}>
+        <h2 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: ".25rem", color: "#b91c1c" }}>
+          Delete Account
+        </h2>
+        <p style={{ fontSize: ".85rem", color: "#666", marginBottom: "1.25rem" }}>
+          Permanently delete your account and all associated data. This action cannot be undone.
+        </p>
+
+        {deleteStep === "idle" && (
+          <button
+            onClick={() => setDeleteStep("confirm")}
+            style={{ padding: ".5rem 1.1rem", fontSize: ".85rem", fontWeight: 600,
+              background: "transparent", color: "#b91c1c", border: "1px solid #b91c1c",
+              borderRadius: 4, cursor: "pointer" }}
+          >
+            Delete My Account
+          </button>
+        )}
+
+        {deleteStep === "confirm" && (
+          <form onSubmit={handleDeleteSubmit}>
+            <div className="field">
+              <label htmlFor="delete-password" style={{ fontSize: ".85rem" }}>
+                Current Password
+              </label>
+              <input
+                id="delete-password"
+                type="password"
+                autoComplete="current-password"
+                placeholder="Enter your password to confirm"
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                required
+                autoFocus
+              />
+            </div>
+
+            {deleteNeedsMfa && (
+              <div className="field">
+                <label htmlFor="delete-otp" style={{ fontSize: ".85rem" }}>
+                  Authenticator Code
+                </label>
+                <input
+                  id="delete-otp"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="000000"
+                  maxLength={6}
+                  value={deleteOtp}
+                  onChange={(e) => setDeleteOtp(e.target.value.replace(/\D/g, ""))}
+                  required
+                  style={{ maxWidth: 160 }}
+                />
+              </div>
+            )}
+
+            {deleteError && (
+              <p style={{ fontSize: ".85rem", color: "#b91c1c", marginBottom: "1rem" }}>
+                {deleteError}
+              </p>
+            )}
+
+            <div style={{ display: "flex", gap: ".75rem", alignItems: "center" }}>
+              <button
+                type="submit"
+                disabled={deleting || !deletePassword || (deleteNeedsMfa && deleteOtp.length !== 6)}
+                style={{ padding: ".5rem 1.1rem", fontSize: ".85rem", fontWeight: 600,
+                  background: "#b91c1c", color: "#fff", border: "none",
+                  borderRadius: 4, cursor: "pointer" }}
+              >
+                {deleting ? "Deleting…" : "Confirm Delete"}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setDeleteStep("idle"); setDeletePassword(""); setDeleteOtp("");
+                  setDeleteNeedsMfa(false); setDeleteError(""); }}
+                style={{ background: "none", border: "none", fontSize: ".82rem",
+                  color: "#666", cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
         )}
       </section>
     </main>

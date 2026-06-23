@@ -263,7 +263,7 @@ def test_invalid_enrol_confirm_code_triggers_axes_signal(auth_client, verified_u
 @pytest.mark.django_db
 def test_delete_account_with_mfa_enrolled_requires_otp(auth_client, verified_user):
     _make_device(verified_user)
-    resp = auth_client.post(DELETE_ACCOUNT_URL, format="json")
+    resp = auth_client.post(DELETE_ACCOUNT_URL, {"current_password": "StrongPass123!"}, format="json")
     assert resp.status_code == 403
     assert resp.data.get("mfa_required") is True
 
@@ -272,7 +272,7 @@ def test_delete_account_with_mfa_enrolled_requires_otp(auth_client, verified_use
 def test_delete_account_with_mfa_valid_otp_succeeds(auth_client, verified_user):
     device, token = _make_device(verified_user)
     with patch("accounts.views.invalidate_all_user_sessions"):
-        resp = auth_client.post(DELETE_ACCOUNT_URL, {"otp_code": token}, format="json")
+        resp = auth_client.post(DELETE_ACCOUNT_URL, {"current_password": "StrongPass123!", "otp_code": token}, format="json")
     assert resp.status_code == 200
     assert not User.objects.filter(pk=verified_user.pk).exists()
 
@@ -280,7 +280,7 @@ def test_delete_account_with_mfa_valid_otp_succeeds(auth_client, verified_user):
 @pytest.mark.django_db
 def test_delete_account_with_mfa_invalid_otp_returns_400(auth_client, verified_user):
     _make_device(verified_user)
-    resp = auth_client.post(DELETE_ACCOUNT_URL, {"otp_code": "000000"}, format="json")
+    resp = auth_client.post(DELETE_ACCOUNT_URL, {"current_password": "StrongPass123!", "otp_code": "000000"}, format="json")
     assert resp.status_code == 400
     assert User.objects.filter(pk=verified_user.pk).exists()
 
@@ -288,6 +288,6 @@ def test_delete_account_with_mfa_invalid_otp_returns_400(auth_client, verified_u
 @pytest.mark.django_db
 def test_delete_account_without_mfa_succeeds_without_otp(auth_client, verified_user):
     with patch("accounts.views.invalidate_all_user_sessions"):
-        resp = auth_client.post(DELETE_ACCOUNT_URL, format="json")
+        resp = auth_client.post(DELETE_ACCOUNT_URL, {"current_password": "StrongPass123!"}, format="json")
     assert resp.status_code == 200
     assert not User.objects.filter(pk=verified_user.pk).exists()
