@@ -3,7 +3,6 @@ from datetime import timedelta
 from decimal import Decimal
 from uuid import uuid4
 
-from django.core.files.storage import default_storage
 from django.utils import timezone
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -12,6 +11,7 @@ from rest_framework.parsers import MultiPartParser
 
 from accounts.permissions import IsAdminUser, IsEmailVerified, IsEmailVerifiedSilent
 from core.audit import log_action
+from core.storage import upload_to_supabase
 from .models import Listing
 from .serializers import (
     BidSerializer,
@@ -166,7 +166,7 @@ class UserBidHistoryView(APIView):
 
 
 class ListingImageUploadView(APIView):
-    """Upload a listing image (authenticated, admin only)."""
+    """Upload a listing image to Supabase (authenticated, admin only)."""
 
     permission_classes = [IsAdminUser]
     staff_only = True
@@ -184,9 +184,12 @@ class ListingImageUploadView(APIView):
         if not f.content_type.startswith("image/"):
             return Response({"detail": "Invalid file type (must be image)."}, status=400)
 
-        # Save with unique name
-        name = f"listings/{uuid4().hex}_{f.name}"
-        saved_name = default_storage.save(name, f)
-        relative_url = default_storage.url(saved_name)
-
-        return Response({"key": saved_name, "url": relative_url}, status=201)
+        try:
+            # Generate unique filename and upload to Supabase
+            filename = f"listings/{uuid4().hex}_{f.name}"
+            public_url = upload_to_supabase(f, filename)
+            
+            # Return full URL as both key and url for client storage
+            return Response({"key": public_url, "url": public_url}, status=201)
+        except Exception as e:
+            return Response({"detail": f"Upload failed: {str(e)}"}, status=500)
