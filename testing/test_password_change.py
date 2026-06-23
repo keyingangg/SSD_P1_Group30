@@ -122,7 +122,7 @@ def test_password_change_new_password_too_long_returns_400(auth_client):
 
 @pytest.mark.django_db
 def test_password_change_breached_password_returns_400(auth_client):
-    with patch("accounts.password.is_password_breached", return_value=True):
+    with patch("accounts.views.is_password_breached", return_value=True):
         resp = auth_client.post(
             PASSWORD_CHANGE_URL,
             {"current_password": "StrongPass123!", "new_password": "NewStrongPass456!"},
