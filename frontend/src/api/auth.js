@@ -107,3 +107,18 @@ export async function verifyMFALogin(otpCode) {
   const { data } = await axiosClient.post("/accounts/mfa/verify-login/", { otp_code: otpCode });
   return data;
 }
+
+export async function changePassword({ currentPassword, newPassword }) {
+  const { data } = await axiosClient.post("/accounts/password-change/", {
+    current_password: currentPassword,
+    new_password: newPassword,
+  });
+  return data;
+}
+
+export async function deleteAccount({ currentPassword, otpCode }) {
+  const payload = { current_password: currentPassword };
+  if (otpCode) payload.otp_code = otpCode;
+  const { data } = await axiosClient.post("/accounts/delete/", payload);
+  return data;
+}
