@@ -3,6 +3,7 @@ from datetime import timedelta
 from decimal import Decimal
 from uuid import uuid4
 
+from django.db.models import Count, OuterRef, Q, Subquery
 from django.utils import timezone
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -12,7 +13,8 @@ from rest_framework.parsers import MultiPartParser
 from accounts.permissions import IsAdminUser, IsEmailVerified, IsEmailVerifiedSilent
 from core.audit import log_action
 from core.storage import upload_to_supabase
-from .models import Listing
+from .bid_engine import submit_bid
+from .models import Bid, Listing
 from .serializers import (
     BidSerializer,
     BidSubmitSerializer,
@@ -28,9 +30,10 @@ class ListingListView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
+        Listing.finalize_ended_auctions()
         queryset = Listing.objects.all().order_by("-starts_at")
         if not request.user.is_staff:
-            queryset = queryset.exclude(status__in=["draft", "ended", "cancelled"])
+            queryset = queryset.exclude(status__in=["draft", "cancelled"])
         serializer = ListingSerializer(queryset, many=True)
         return Response(serializer.data)
 
@@ -41,12 +44,13 @@ class ListingDetailView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, listing_id):
+        Listing.finalize_ended_auctions()
         try:
             listing = Listing.objects.get(pk=listing_id)
         except Listing.DoesNotExist:
             return Response({"detail": "Listing not found."}, status=404)
 
-        if not request.user.is_staff and listing.status in {"draft", "ended", "cancelled"}:
+        if not request.user.is_staff and listing.status in {"draft", "cancelled"}:
             return Response({"detail": "Listing not found."}, status=404)
 
         serializer = ListingSerializer(listing)
@@ -110,16 +114,35 @@ class ListingUpdateView(APIView):
         serializer.is_valid(raise_exception=True)
 
         data = serializer.validated_data
+        save_as_draft = data.get("save_as_draft", False)
+
+        now = timezone.now()
+        starts_at = data.get("starts_at")
+        ends_at = data.get("ends_at")
+        time_errors = {}
+        if starts_at is not None and starts_at < now:
+            time_errors["starts_at"] = "Start time cannot be in the past when updating a listing."
+        if ends_at is not None and ends_at < now:
+            time_errors["ends_at"] = "End time cannot be in the past when updating a listing."
+        if time_errors:
+            return Response(time_errors, status=400)
+
         listing.title = data["title"]
         listing.description = data["description"]
         listing.category = data.get("category", listing.category)
         listing.image_key = data.get("image_key", listing.image_key)
         listing.starting_price = data["starting_price"]
         listing.minimum_increment = data["minimum_increment"]
-        listing.starts_at = data["starts_at"]
-        listing.ends_at = data["ends_at"]
-        if listing.status not in {"draft", "cancelled"}:
+        listing.starts_at = starts_at
+        listing.ends_at = ends_at
+
+        if listing.status == "cancelled":
+            pass
+        elif save_as_draft:
+            listing.status = "draft"
+        else:
             listing.status = Listing.determine_status(listing.starts_at, listing.ends_at)
+
         listing.save()
 
         return Response({"detail": "Listing updated."}, status=200)
@@ -148,8 +171,31 @@ class BidSubmitView(APIView):
     permission_classes = [IsEmailVerified]
 
     def post(self, request, listing_id):
-        # TODO: delegate to bid_engine.submit_bid with full validation.
-        return Response({"detail": "Not implemented."}, status=501)
+        serializer = BidSubmitSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            bid, listing = submit_bid(
+                listing_id=listing_id,
+                user=request.user,
+                amount=serializer.validated_data["amount"],
+            )
+        except LookupError:
+            return Response({"detail": "Listing not found."}, status=404)
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+
+        return Response(
+            {
+                "detail": "Bid submitted.",
+                "bid": BidSerializer(bid).data,
+                "listing": {
+                    "id": str(listing.id),
+                    "current_highest_bid": listing.current_highest_bid,
+                },
+            },
+            status=201,
+        )
 
 
 class UserBidHistoryView(APIView):
@@ -163,6 +209,173 @@ class UserBidHistoryView(APIView):
         bids = Bid.objects.filter(bidder=request.user).order_by("-submitted_at")
         serializer = BidSerializer(bids, many=True)
         return Response(serializer.data)
+
+
+class UserDashboardView(APIView):
+    """Read dashboard data scoped to the authenticated user's UUID only."""
+
+    permission_classes = [IsEmailVerifiedSilent]
+
+    def get(self, request):
+        from payments.models import Order
+
+        if request.user.is_staff:
+            return Response({"detail": "Admins cannot access the bidder dashboard."}, status=403)
+
+        Listing.finalize_ended_auctions()
+
+        now = timezone.now()
+        user_id = request.user.id
+
+        user_latest_bid_qs = Bid.objects.filter(
+            listing=OuterRef("pk"),
+            bidder_id=user_id,
+        ).order_by("-submitted_at")
+        winning_bidder_qs = Bid.objects.filter(
+            listing=OuterRef("pk"),
+            is_winning=True,
+        ).order_by("-submitted_at")
+
+        active_bid_listings = (
+            Listing.objects.filter(
+                bids__bidder_id=user_id,
+                starts_at__lte=now,
+                ends_at__gt=now,
+            )
+            .exclude(status__in=["draft", "cancelled"])
+            .annotate(
+                user_latest_bid_amount=Subquery(
+                    user_latest_bid_qs.values("amount")[:1]
+                ),
+                user_latest_bid_submitted_at=Subquery(
+                    user_latest_bid_qs.values("submitted_at")[:1]
+                ),
+                current_winning_bidder_id=Subquery(
+                    winning_bidder_qs.values("bidder_id")[:1]
+                ),
+            )
+            .order_by("ends_at")
+            .distinct()
+        )
+
+        won_listings = (
+            Listing.objects.filter(winner_id=user_id)
+            .exclude(status__in=["draft", "cancelled"])
+            .order_by("-ends_at")
+        )
+
+        history_listings = (
+            Listing.objects.filter(bids__bidder_id=user_id)
+            .exclude(status__in=["draft", "cancelled"])
+            .annotate(
+                user_latest_bid_amount=Subquery(
+                    user_latest_bid_qs.values("amount")[:1]
+                ),
+                user_latest_bid_submitted_at=Subquery(
+                    user_latest_bid_qs.values("submitted_at")[:1]
+                ),
+                user_bid_count=Count(
+                    "bids",
+                    filter=Q(bids__bidder_id=user_id),
+                ),
+            )
+            .order_by("-ends_at", "-starts_at")
+            .distinct()
+        )
+
+        orders = Order.objects.filter(winner_id=user_id).select_related(
+            "winning_bid__listing"
+        )
+        orders_by_listing_id = {
+            order.winning_bid.listing_id: order
+            for order in orders
+        }
+
+        active_bids_data = [
+            {
+                "listing_id": listing.id,
+                "title": listing.title,
+                "image_key": listing.image_key,
+                "ends_at": listing.ends_at,
+                "current_highest_bid": listing.current_highest_bid,
+                "user_latest_bid_amount": listing.user_latest_bid_amount,
+                "user_latest_bid_submitted_at": listing.user_latest_bid_submitted_at,
+                "is_currently_winning": (
+                    listing.current_winning_bidder_id == user_id
+                ),
+            }
+            for listing in active_bid_listings
+        ]
+
+        won_auctions_data = []
+        for listing in won_listings:
+            order = orders_by_listing_id.get(listing.id)
+            won_auctions_data.append(
+                {
+                    "listing_id": listing.id,
+                    "title": listing.title,
+                    "image_key": listing.image_key,
+                    "ended_at": listing.ends_at,
+                    "winning_amount": listing.current_highest_bid,
+                    "payment_status": (
+                        order.fulfillment_status if order else "pending_payment"
+                    ),
+                    "order_id": order.id if order else None,
+                }
+            )
+
+        payment_counts = {
+            choice[0]: 0
+            for choice in Order.FULFILLMENT_CHOICES
+        }
+        for order in orders:
+            payment_counts[order.fulfillment_status] += 1
+
+        payment_status_data = {
+            "total_orders": len(orders_by_listing_id),
+            "counts_by_status": payment_counts,
+            "pending_payment_auctions": [
+                item
+                for item in won_auctions_data
+                if item["payment_status"] == "pending_payment"
+            ],
+        }
+
+        history_data = []
+        for listing in history_listings:
+            if listing.ends_at > now:
+                result = "active"
+            elif listing.winner_id == user_id:
+                result = "won"
+            elif listing.winner_id is None:
+                result = "ended_no_winner"
+            else:
+                result = "lost"
+
+            history_data.append(
+                {
+                    "listing_id": listing.id,
+                    "title": listing.title,
+                    "image_key": listing.image_key,
+                    "starts_at": listing.starts_at,
+                    "ends_at": listing.ends_at,
+                    "status": listing.get_runtime_status(now=now),
+                    "result": result,
+                    "user_bid_count": listing.user_bid_count,
+                    "user_latest_bid_amount": listing.user_latest_bid_amount,
+                    "user_latest_bid_submitted_at": listing.user_latest_bid_submitted_at,
+                    "final_price": listing.current_highest_bid,
+                }
+            )
+
+        return Response(
+            {
+                "active_bids": active_bids_data,
+                "won_auctions": won_auctions_data,
+                "payment_status": payment_status_data,
+                "auction_history": history_data,
+            }
+        )
 
 
 class ListingImageUploadView(APIView):

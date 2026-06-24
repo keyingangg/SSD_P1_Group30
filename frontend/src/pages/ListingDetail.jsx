@@ -13,6 +13,11 @@ export default function ListingDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  async function refreshListing() {
+    const data = await getListingDetail(id);
+    setListing(data);
+  }
+
   useEffect(() => {
     let active = true;
 
@@ -60,7 +65,7 @@ export default function ListingDetail() {
       {error ? <p className="admin-error-text">{error}</p> : null}
       {!loading && !error ? <AuctionExtendedDetails listing={listing} /> : null}
       <BidFeed listingId={id} />
-      <BidForm listingId={id} />
+      <BidForm listingId={id} listing={listing} onSubmit={refreshListing} />
     </main>
   );
 }

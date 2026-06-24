@@ -3,6 +3,7 @@ import uuid
 
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 
 
@@ -107,6 +108,57 @@ class Listing(models.Model):
         if self.status not in {"draft", "cancelled"}:
             self.status = self.determine_status(self.starts_at, self.ends_at)
         super().save(*args, **kwargs)
+
+    def finalize_if_ended(self, now=None):
+        """Persist winner/status once the auction has ended."""
+        now = now or timezone.now()
+
+        if self.status in {"draft", "cancelled"}:
+            return False
+
+        if not self.ends_at or now < self.ends_at:
+            return False
+
+        winning_bid = self.bids.order_by("-amount", "submitted_at", "id").first()
+        winner_id = winning_bid.bidder_id if winning_bid else None
+
+        fields_to_update = []
+
+        if self.status != "ended":
+            self.status = "ended"
+            fields_to_update.append("status")
+
+        if self.winner_id != winner_id:
+            self.winner_id = winner_id
+            fields_to_update.append("winner")
+
+        if winning_bid and self.current_highest_bid != winning_bid.amount:
+            self.current_highest_bid = winning_bid.amount
+            fields_to_update.append("current_highest_bid")
+
+        if fields_to_update:
+            fields_to_update.append("updated_at")
+            self.save(update_fields=fields_to_update)
+
+        if winning_bid:
+            self.bids.exclude(pk=winning_bid.pk).update(is_winning=False)
+            if not winning_bid.is_winning:
+                winning_bid.is_winning = True
+                winning_bid.save(update_fields=["is_winning"])
+
+        return bool(fields_to_update)
+
+    @classmethod
+    def finalize_ended_auctions(cls, now=None):
+        """Finalize all auctions that reached end time and still need winner/status sync."""
+        now = now or timezone.now()
+
+        ended_candidates = cls.objects.exclude(status__in={"draft", "cancelled"}).filter(
+            ends_at__lte=now
+        ).filter(Q(status__in={"active", "scheduled"}) | Q(winner__isnull=True))
+
+        for listing in ended_candidates:
+            listing.finalize_if_ended(now=now)
 
     def __str__(self):
         return self.title

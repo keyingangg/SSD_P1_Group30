@@ -1,0 +1,121 @@
+.dashboard-page {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 30px 18px 56px;
+}
+
+.dashboard-hero {
+  padding: 26px 24px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 90% -10%, rgba(194, 161, 90, 0.24), transparent 45%),
+    linear-gradient(180deg, #f5f2ea 0%, #ece7dc 100%);
+}
+
+.dashboard-hero h1 {
+  font-size: clamp(2rem, 4vw, 2.65rem);
+}
+
+.dashboard-subtitle {
+  margin: 10px 0 0;
+  color: var(--ink-soft);
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.dashboard-panel {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f9f6f0;
+  padding: 18px;
+  box-shadow: 0 8px 30px rgba(27, 26, 23, 0.04);
+}
+
+.dashboard-panel h2 {
+  margin-bottom: 14px;
+  font-size: 1.2rem;
+}
+
+.dashboard-panel-wide {
+  grid-column: 1 / -1;
+}
+
+.dashboard-note {
+  margin: 0;
+  color: var(--muted);
+}
+
+.dashboard-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.dashboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 620px;
+}
+
+.dashboard-table th,
+.dashboard-table td {
+  text-align: left;
+  font-size: 0.92rem;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.dashboard-table th {
+  font-size: 0.74rem;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.dashboard-stats-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.dashboard-stats-list li {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fffdfa;
+}
+
+@media (max-width: 980px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .dashboard-page {
+    padding: 24px 12px 46px;
+  }
+
+  .dashboard-hero {
+    padding: 20px 16px;
+  }
+
+  .dashboard-panel {
+    padding: 14px;
+  }
+
+  .dashboard-table {
+    min-width: 540px;
+  }
+}

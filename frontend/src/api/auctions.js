@@ -32,7 +32,20 @@ export async function uploadListingImage(formData) {
 }
 
 // TODO: POST /auctions/:id/bid/
-export async function submitBid(listingId, amount) {}
+export async function submitBid(listingId, amount) {
+  const { data } = await axiosClient.post(`/auctions/${listingId}/bid/`, {
+    amount,
+  });
+  return data;
+}
 
 // TODO: GET /auctions/bids/history/
-export async function getUserBidHistory() {}
+export async function getUserBidHistory() {
+  const { data } = await axiosClient.get("/auctions/bids/history/");
+  return data;
+}
+
+export async function getUserDashboard() {
+  const { data } = await axiosClient.get("/auctions/dashboard/");
+  return data;
+}

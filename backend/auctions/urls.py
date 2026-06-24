@@ -8,6 +8,11 @@ urlpatterns = [
     path("create/", views.ListingCreateView.as_view(), name="listing-create"),
     path("upload-image/", views.ListingImageUploadView.as_view(), name="upload-image"),
     path(
+        "dashboard/",
+        views.UserDashboardView.as_view(),
+        name="user-dashboard",
+    ),
+    path(
         "bids/history/",
         views.UserBidHistoryView.as_view(),
         name="bid-history",
