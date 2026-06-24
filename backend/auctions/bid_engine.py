@@ -26,9 +26,6 @@ def submit_bid(listing_id, user, amount):
     if not getattr(user, "is_email_verified", False):
       raise ValueError("Verified account required.")
 
-    if getattr(user, "is_staff", False):
-      raise ValueError("Admins cannot place bids.")
-
     try:
       bid_amount = Decimal(str(amount))
     except (InvalidOperation, TypeError):
@@ -45,6 +42,9 @@ def submit_bid(listing_id, user, amount):
 
       if listing.created_by_id == user.id:
         raise ValueError("You cannot bid on your own listing.")
+
+      if getattr(user, "is_staff", False):
+        raise ValueError("Admins cannot place bids.")
 
       runtime_status = listing.get_runtime_status(now=timezone.now())
       if runtime_status != "active":

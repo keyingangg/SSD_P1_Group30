@@ -372,49 +372,6 @@ def test_draft_listing_becomes_scheduled_when_completed_on_update(admin_client, 
 
 
 @pytest.mark.django_db
-def test_update_listing_rejects_past_start_and_end_times(admin_client, admin_user):
-    now = timezone.now()
-    listing = Listing.objects.create(
-        created_by=admin_user,
-        title="Future Listing",
-        description="Auction item",
-        image_key="listings/future.jpg",
-        category="Others",
-        starting_price="100.00",
-        current_highest_bid="0.00",
-        minimum_increment="5.00",
-        starts_at=now + timedelta(days=1),
-        ends_at=now + timedelta(days=2),
-        status="scheduled",
-    )
-
-    payload = {
-        "title": "Future Listing Updated",
-        "description": "Updated auction item",
-        "image_key": "listings/future.jpg",
-        "category": "Others",
-        "starting_price": "120.00",
-        "minimum_increment": "5.00",
-        "starts_at": (now - timedelta(hours=2)).isoformat(),
-        "ends_at": (now - timedelta(hours=1)).isoformat(),
-        "save_as_draft": False,
-    }
-
-    resp = admin_client.patch(
-        f"/api/auctions/{listing.id}/update/",
-        payload,
-        format="json",
-    )
-
-    assert resp.status_code == 400
-    data = resp.json()
-    assert "starts_at" in data
-    assert "ends_at" in data
-
-    listing.refresh_from_db()
-    assert listing.title == "Future Listing"
-
-
 @pytest.mark.django_db
 def test_update_listing_allows_past_start_and_end_times(admin_client, admin_user):
     now = timezone.now()

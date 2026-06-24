@@ -115,26 +115,14 @@ class ListingUpdateView(APIView):
 
         data = serializer.validated_data
         save_as_draft = data.get("save_as_draft", False)
-
-        now = timezone.now()
-        starts_at = data.get("starts_at")
-        ends_at = data.get("ends_at")
-        time_errors = {}
-        if starts_at is not None and starts_at < now:
-            time_errors["starts_at"] = "Start time cannot be in the past when updating a listing."
-        if ends_at is not None and ends_at < now:
-            time_errors["ends_at"] = "End time cannot be in the past when updating a listing."
-        if time_errors:
-            return Response(time_errors, status=400)
-
         listing.title = data["title"]
         listing.description = data["description"]
         listing.category = data.get("category", listing.category)
         listing.image_key = data.get("image_key", listing.image_key)
         listing.starting_price = data["starting_price"]
         listing.minimum_increment = data["minimum_increment"]
-        listing.starts_at = starts_at
-        listing.ends_at = ends_at
+        listing.starts_at = data["starts_at"]
+        listing.ends_at = data["ends_at"]
 
         if listing.status == "cancelled":
             pass
