@@ -50,7 +50,6 @@ export default function Navbar() {
       </div>
 
       <div className="nav-right">
-        <span className="nav-user-name">{user?.display_name || user?.email?.split("@")[0] || ""}</span>
         <button
           className="nav-avatar"
           onClick={() => { setDropdownOpen((o) => !o); setConfirmingLogout(false); }}

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { submitBid } from "../api/auctions.js";
 
-// Bid amount input and submit control for an active auction.
 export default function BidForm({ listingId, listing, onSubmit }) {
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -21,13 +20,12 @@ export default function BidForm({ listingId, listing, onSubmit }) {
     nowMs < endsAtMs;
 
   const isDefinitelyInactive = ["draft", "cancelled", "ended"].includes(runtimeStatus);
-
   const isActive =
     !isDefinitelyInactive &&
     (runtimeStatus === "active" || displayStatus === "live now" || isWithinAuctionWindow);
 
-  const startingPrice = Number(listing?.starting_price || 0);
   const currentHighestBid = Number(listing?.current_highest_bid || 0);
+  const startingPrice = Number(listing?.starting_price || 0);
   const minimumIncrement = Number(listing?.minimum_increment || 0);
 
   const minimumAllowedBid = useMemo(() => {
@@ -42,9 +40,18 @@ export default function BidForm({ listingId, listing, onSubmit }) {
     }
   }, [listingId, minimumAllowedBid]);
 
+  const quickIncrements = useMemo(() => {
+    if (minimumIncrement <= 0) return [];
+    return [1, 2, 4].map((mult) => minimumIncrement * mult);
+  }, [minimumIncrement]);
+
+  const applyQuick = (inc) => {
+    const base = currentHighestBid > 0 ? currentHighestBid : startingPrice;
+    setAmount((base + inc).toFixed(2));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     setError("");
     setSuccess("");
 
@@ -52,12 +59,10 @@ export default function BidForm({ listingId, listing, onSubmit }) {
       setError("Bidding is available only when the auction is live.");
       return;
     }
-
     if (!amount) {
       setError("Please enter your bid amount.");
       return;
     }
-
     if (minimumAllowedBid > 0 && Number(amount) < minimumAllowedBid) {
       setError(`Bid must be at least $${minimumAllowedBid.toFixed(2)}.`);
       return;
@@ -68,94 +73,87 @@ export default function BidForm({ listingId, listing, onSubmit }) {
       await submitBid(listingId, amount);
       setSuccess("Bid submitted successfully.");
       setAmount(minimumAllowedBid > 0 ? minimumAllowedBid.toFixed(2) : "");
-      if (typeof onSubmit === "function") {
-        onSubmit();
-      }
+      if (typeof onSubmit === "function") onSubmit();
     } catch (err) {
-      const detail = err?.response?.data?.detail;
-      setError(detail || "Unable to submit bid.");
+      setError(err?.response?.data?.detail || "Unable to submit bid.");
     } finally {
       setSubmitting(false);
     }
   };
 
+  const formatSGD = (n) => `S$${Number(n).toLocaleString("en-SG", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+
   return (
-    <form
-      onSubmit={handleSubmit}
-      style={{
-        border: "1px solid rgba(27,26,23,.12)",
-        borderRadius: 10,
-        background: "#fff",
-        padding: "1rem",
-        display: "grid",
-        gap: "0.7rem",
-      }}
-    >
-      <h3 style={{ margin: 0 }}>Place a bid</h3>
-      {!isActive ? (
-        <p style={{ margin: 0, color: "#6b7280" }}>
-          {runtimeStatus === "ended" ? "Auction has ended." : "Auction not live yet. Bidding opens at the start time."}
-        </p>
-      ) : null}
+    <form onSubmit={handleSubmit}>
+      {/* YOUR BID label */}
+      <div className="ld-your-bid-label">Your Bid (SGD)</div>
 
-      {runtimeStatus !== "ended" && (
-        <>
-          {listing?.minimum_increment ? (
-            <p style={{ margin: 0, color: "#6b7280", fontSize: ".9rem" }}>
-              Minimum increment: ${Number(listing.minimum_increment).toFixed(2)}
-            </p>
-          ) : null}
+      {/* Input row */}
+      <div className="ld-input-wrap">
+        <span className="ld-input-prefix">S$</span>
+        <input
+          id="bid-amount"
+          type="number"
+          min={minimumAllowedBid > 0 ? minimumAllowedBid.toFixed(2) : "0"}
+          step="0.01"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder={minimumAllowedBid > 0 ? minimumAllowedBid.toFixed(2) : "0.00"}
+          disabled={!isActive || submitting}
+        />
+        <span className="ld-input-min-label">min. bid</span>
+      </div>
 
-          {minimumAllowedBid > 0 ? (
-            <p style={{ margin: 0, color: "#6b7280", fontSize: ".9rem" }}>
-              Suggested minimum bid (from start price/current bid): ${minimumAllowedBid.toFixed(2)}
-            </p>
-          ) : null}
-
-          <div style={{ display: "grid", gap: "0.45rem" }}>
-            <label htmlFor="bid-amount">Your bid amount</label>
-            <input
-              id="bid-amount"
-              type="number"
-              min={minimumAllowedBid > 0 ? minimumAllowedBid.toFixed(2) : "0"}
-              step="0.01"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder={minimumAllowedBid > 0 ? minimumAllowedBid.toFixed(2) : "0.00"}
+      {/* Quick increment buttons */}
+      {quickIncrements.length > 0 && (
+        <div className="ld-quick-btns">
+          {quickIncrements.map((inc) => (
+            <button
+              key={inc}
+              type="button"
+              className="ld-quick-btn"
+              onClick={() => applyQuick(inc)}
               disabled={!isActive || submitting}
-              style={{
-                padding: "0.65rem 0.7rem",
-                borderRadius: 8,
-                border: "1px solid rgba(27,26,23,.2)",
-              }}
-            />
-          </div>
-
+            >
+              +{formatSGD(inc)}
+            </button>
+          ))}
           <button
-            type="submit"
+            type="button"
+            className="ld-quick-btn"
+            onClick={() => setAmount("")}
             disabled={!isActive || submitting}
-            style={{
-              justifySelf: "start",
-              padding: "0.6rem 0.9rem",
-              borderRadius: 8,
-              border: "none",
-              background: isActive ? "var(--gold, #c2a15a)" : "#d1d5db",
-              color: isActive ? "#fff" : "#374151",
-              cursor: !isActive || submitting ? "not-allowed" : "pointer",
-              fontWeight: 600,
-            }}
           >
-            {submitting ? "Submitting..." : "Place Bid"}
+            Custom
           </button>
-        </>
+        </div>
       )}
 
-      {error ? (
-        <p style={{ margin: 0, color: "#b91c1c", fontSize: ".9rem" }}>{error}</p>
-      ) : null}
-      {success ? (
-        <p style={{ margin: 0, color: "#166534", fontSize: ".9rem" }}>{success}</p>
-      ) : null}
+      {/* Place bid button */}
+      {runtimeStatus !== "ended" && (
+        <button
+          type="submit"
+          className="ld-place-bid-btn"
+          disabled={!isActive || submitting}
+        >
+          {submitting ? "Submitting…" : "Place Bid"}
+        </button>
+      )}
+
+      {runtimeStatus === "ended" && (
+        <p style={{ margin: "0 0 8px", color: "#6b7280", fontSize: 13 }}>Auction has ended.</p>
+      )}
+
+      {!isActive && runtimeStatus !== "ended" && (
+        <p style={{ margin: "0 0 8px", color: "#6b7280", fontSize: 12 }}>
+          Auction not live yet. Bidding opens at start time.
+        </p>
+      )}
+
+      <p className="ld-bid-footnote">Bids are binding contracts · Authentication required</p>
+
+      {error && <div className="ld-bid-msg-error">{error}</div>}
+      {success && <div className="ld-bid-msg-success">{success}</div>}
     </form>
   );
 }

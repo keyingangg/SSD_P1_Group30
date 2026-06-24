@@ -5,8 +5,31 @@ import { getListingDetail } from "../api/auctions.js";
 import AuctionExtendedDetails from "../components/AuctionExtendedDetails.jsx";
 import BidFeed from "../components/BidFeed.jsx";
 import BidForm from "../components/BidForm.jsx";
+import CountdownTimer from "../components/CountdownTimer.jsx";
+import "../styles/listing-detail.css";
 
-// Single listing view: details, live bid feed, bid form, and countdown.
+function formatSGD(value) {
+  const n = Number(value);
+  if (!n || Number.isNaN(n)) return "-";
+  return `S$${n.toLocaleString("en-SG", { minimumFractionDigits: 0 })}`;
+}
+
+function formatDateTime(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const date = d.toLocaleString("en-SG", {
+    timeZone: "Asia/Singapore",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  return `${date} SGT`;
+}
+
 export default function ListingDetail() {
   const { id } = useParams();
   const [listing, setListing] = useState(null);
@@ -20,7 +43,6 @@ export default function ListingDetail() {
 
   useEffect(() => {
     let active = true;
-
     async function load() {
       setLoading(true);
       setError("");
@@ -29,43 +51,308 @@ export default function ListingDetail() {
         if (active) setListing(data);
       } catch (err) {
         if (!active) return;
-        const message = err?.response?.data?.detail || "Could not load listing.";
-        setError(message);
+        setError(err?.response?.data?.detail || "Could not load listing.");
       } finally {
         if (active) setLoading(false);
       }
     }
-
     load();
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, [id]);
 
+  const runtimeStatus = String(listing?.status || "").toLowerCase();
+  const displayStatus = String(listing?.display_status || "").toLowerCase();
+  const nowMs = Date.now();
+  const startsAtMs = listing?.starts_at ? new Date(listing.starts_at).getTime() : NaN;
+  const endsAtMs = listing?.ends_at ? new Date(listing.ends_at).getTime() : NaN;
+
+  const isClosed =
+    runtimeStatus === "ended" ||
+    runtimeStatus === "cancelled" ||
+    (Number.isFinite(endsAtMs) && nowMs >= endsAtMs);
+
+  const isLive =
+    !isClosed &&
+    (runtimeStatus === "active" || displayStatus === "live now" ||
+      (Number.isFinite(startsAtMs) && Number.isFinite(endsAtMs) && startsAtMs <= nowMs && nowMs < endsAtMs));
+
+  const category = listing?.category || null;
+  const currentBid = listing?.current_highest_bid || listing?.starting_price;
+
+  // Closed-state user context — populated if the backend returns these fields
+  const userWon = listing?.user_won === true;
+  const userHighestBid = Number(listing?.user_highest_bid || 0);
+  const userParticipated = userHighestBid > 0 || userWon;
+  const bidCount = listing?.bid_count ?? null;
+  const winnerDiff = userParticipated && !userWon && currentBid
+    ? Number(currentBid) - userHighestBid
+    : 0;
+
   return (
-    <main style={{ padding: "1.25rem", display: "grid", gap: "1rem" }}>
-      <div>
-        <Link
-          to="/auctions"
-          style={{
-            display: "inline-block",
-            textDecoration: "none",
-            color: "var(--ink)",
-            border: "none",
-            borderRadius: 0,
-            padding: ".45rem .75rem",
-            background: "transparent",
-            fontSize: ".9rem",
-          }}
-        >
-          Back to Auctions
-        </Link>
-      </div>
-      {loading ? <p>Loading listing details...</p> : null}
-      {error ? <p className="admin-error-text">{error}</p> : null}
-      {!loading && !error ? <AuctionExtendedDetails listing={listing} /> : null}
-      <BidFeed listingId={id} />
-      <BidForm listingId={id} listing={listing} onSubmit={refreshListing} />
+    <main className="ld-page">
+      {/* Breadcrumb */}
+      <nav className="ld-breadcrumb">
+        <Link to="/auctions">Auctions</Link>
+        {category && (
+          <>
+            <span className="ld-breadcrumb-sep">›</span>
+            <Link to={`/auctions?category=${encodeURIComponent(category)}`}>{category}</Link>
+          </>
+        )}
+        {listing?.title && (
+          <>
+            <span className="ld-breadcrumb-sep">›</span>
+            <span>{listing.title}</span>
+          </>
+        )}
+      </nav>
+
+      {loading && <p style={{ opacity: 0.65 }}>Loading listing…</p>}
+      {error && <p className="admin-error-text">{error}</p>}
+
+      {!loading && !error && listing && (
+        <>
+          {/* Header */}
+          <div className="ld-header">
+<h1 className="ld-header-title">{listing.title || "Untitled Item"}</h1>
+            {isClosed && <span className="ld-closed-badge">Closed</span>}
+            {isLive && (
+              <span className="ld-live-badge">
+                <span className="ld-live-dot" />
+                Live
+              </span>
+            )}
+          </div>
+
+          {/* Body */}
+          <div className="ld-body">
+            <AuctionExtendedDetails listing={listing} />
+
+            {/* Right panel */}
+            <div className="ld-right">
+              <div className="ld-panel">
+
+                {/* ── CLOSED STATE ── */}
+                {isClosed ? (
+                  <>
+                    {/* Status bar */}
+                    <div className="ld-status-bar">
+                      <span className="ld-status-closed">
+                        <span className="ld-status-dot-grey" />
+                        Auction Closed
+                      </span>
+                      {listing.ends_at && (
+                        <>
+                          <span className="ld-status-sep">·</span>
+                          <span className="ld-status-info">{formatDateTime(listing.ends_at)}</span>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Hammer price */}
+                    <div className="ld-panel-section">
+                      <div className="ld-bid-label">Hammer Price</div>
+                      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "1rem" }}>
+                        <div className="ld-bid-number">{formatSGD(currentBid)}</div>
+                        {bidCount !== null && (
+                          <div className="ld-bid-count">{bidCount} bids placed</div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* User-specific banner */}
+                    {userWon && (
+                      <div className="ld-panel-section">
+                        <div className="ld-banner-win">
+                          <span className="ld-banner-win-dot" />
+                          <span>
+                            Congratulations — you placed the winning bid of {formatSGD(currentBid)}.
+                            Complete checkout to claim this lot within 72 hours.
+                          </span>
+                        </div>
+                        <div style={{ marginTop: 14 }}>
+                          <a href="#checkout" className="ld-cta-btn">Proceed to Checkout →</a>
+                          <p className="ld-cta-note">Payment must be completed within 72 hours of auction close</p>
+                          <a href="/auctions" className="ld-cta-link">Browse Similar Lots</a>
+                        </div>
+                      </div>
+                    )}
+
+                    {userParticipated && !userWon && (
+                      <div className="ld-panel-section">
+                        <div className="ld-banner-outbid">
+                          <span className="ld-banner-outbid-dot" />
+                          <span>
+                            You were outbid. Your final offer of {formatSGD(userHighestBid)} did not win this lot.
+                            The hammer price was {formatSGD(currentBid)}.
+                          </span>
+                        </div>
+                        <div className="ld-your-bid-section">
+                          <div className="ld-your-bid-label-sm">Your Highest Bid</div>
+                          <div className="ld-your-bid-row">
+                            <span className="ld-your-bid-number">{formatSGD(userHighestBid)}</span>
+                            {winnerDiff > 0 && (
+                              <span className="ld-your-bid-note">Winning bid was {formatSGD(winnerDiff)} higher</span>
+                            )}
+                          </div>
+                        </div>
+                        <div style={{ marginTop: 14 }}>
+                          <a href="/auctions" className="ld-cta-btn">Browse Similar Lots</a>
+                          <p className="ld-cta-note">Discover other lots in {category || "Auctions"} matching your interest</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {!userParticipated && (
+                      <div className="ld-panel-section">
+                        <a href="/auctions" className="ld-cta-btn">Browse Similar Lots</a>
+                      </div>
+                    )}
+
+                    {/* Final bid history */}
+                    <div className="ld-panel-section">
+                      <div className="ld-history-header">
+                        <span className="ld-history-title">Final Bid History</span>
+                        <span className="ld-history-note">All bids are final</span>
+                      </div>
+                      <BidFeed listingId={id} isClosed={isClosed} userHighestBid={userHighestBid} />
+                    </div>
+                  </>
+                ) : (
+                  /* ── LIVE / UPCOMING STATE ── */
+                  <>
+                    {/* Status bar */}
+                    <div className={`ld-status-bar${isLive ? " ld-status-bar--live" : ""}`}>
+                      {isLive ? (
+                        <>
+                          <span className="ld-status-live">
+                            <span className="ld-status-dot" />
+                            Auction Live
+                          </span>
+                          <span className="ld-status-sep">·</span>
+                          <span className="ld-status-info" style={{ color: "#3a7d55" }}>WebSocket connected</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="ld-status-upcoming">
+                            <span className="ld-status-dot-gold" />
+                            Upcoming
+                          </span>
+                          <span className="ld-status-sep">·</span>
+                          <span className="ld-status-info">Bidding not yet open</span>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Estimate */}
+                    {listing.starting_price && (
+                      <div className="ld-panel-section">
+                        <span className="ld-estimate">
+                          Estimate: <span>{formatSGD(listing.starting_price)}</span>
+                          {listing.estimate_high && <> — <span>{formatSGD(listing.estimate_high)}</span></>}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Countdown */}
+                    <div className="ld-panel-section ld-countdown-section">
+                      <div className="ld-countdown-label">
+                        {isLive ? "Auction Closes In" : "Auction Opens In"}
+                      </div>
+                      <CountdownTimer
+                        startsAt={listing.starts_at}
+                        endsAt={listing.ends_at}
+                        preStartDisplay="countdown"
+                        segmented
+                      />
+                    </div>
+
+                    {isLive ? (
+                      <>
+                        {/* Current highest bid */}
+                        <div className="ld-panel-section">
+                          <div className="ld-bid-label">Current Highest Bid</div>
+                          <div className="ld-bid-number">{formatSGD(currentBid)}</div>
+                          {listing.minimum_increment && (
+                            <div className="ld-bid-meta">
+                              <span>Minimum next bid: {formatSGD(Number(currentBid || 0) + Number(listing.minimum_increment))}</span>
+                              <span className="ld-bid-meta-sep">·</span>
+                              <span>Increment: {formatSGD(listing.minimum_increment)}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Bid form */}
+                        <div className="ld-panel-section">
+                          <BidForm listingId={id} listing={listing} onSubmit={refreshListing} />
+                        </div>
+
+                        {/* Live bid history */}
+                        <div className="ld-panel-section">
+                          <BidFeed listingId={id} isClosed={false} userHighestBid={0} />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        {/* Starting bid */}
+                        <div className="ld-panel-section">
+                          <div className="ld-bid-label">Starting Bid</div>
+                          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "1rem" }}>
+                            <div className="ld-bid-number">{formatSGD(listing.starting_price)}</div>
+                            {listing.minimum_increment && (
+                              <div className="ld-bid-count">Bid increment: {formatSGD(listing.minimum_increment)}</div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Opens info banner */}
+                        {listing.starts_at && (
+                          <div className="ld-panel-section">
+                            <div className="ld-banner-upcoming">
+                              <span className="ld-banner-upcoming-dot" />
+                              <span>
+                                Bidding opens {formatDateTime(listing.starts_at)}.<br />
+                                Add to Watchlist to be notified when this lot opens.
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Lot schedule */}
+                        <div className="ld-panel-section">
+                          <div className="ld-schedule-card">
+                            <div className="ld-schedule-title">Lot Schedule</div>
+                            <hr className="ld-schedule-divider" />
+                            <div className="ld-schedule-table">
+                              {listing.starts_at && (
+                                <><span className="ld-schedule-label">Opens</span><span className="ld-schedule-value">{formatDateTime(listing.starts_at)}</span></>
+                              )}
+                              {listing.ends_at && (
+                                <><span className="ld-schedule-label">Closes</span><span className="ld-schedule-value">{formatDateTime(listing.ends_at)}</span></>
+                              )}
+                              {listing.starting_price && (
+                                <><span className="ld-schedule-label">Starting Bid</span><span className="ld-schedule-value">{formatSGD(listing.starting_price)}</span></>
+                              )}
+                              {listing.minimum_increment && (
+                                <><span className="ld-schedule-label">Increment</span><span className="ld-schedule-value">{formatSGD(listing.minimum_increment)}</span></>
+                              )}
+                              {listing.condition && (
+                                <><span className="ld-schedule-label">Condition</span><span className="ld-schedule-value">{listing.condition}</span></>
+                              )}
+                              <span className="ld-schedule-label">Reserve</span>
+                              <span className="ld-schedule-value" style={{ fontWeight: 700 }}>Confidential</span>
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </main>
   );
 }
