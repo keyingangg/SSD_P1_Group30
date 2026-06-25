@@ -9,7 +9,8 @@ function lotNum(id) {
 
 export default function AuctionCard({ listing, index }) {
   const imageUrl = listing.image_key || null;
-  const isLive = String(listing.display_status || listing.status || "").toLowerCase() === "active";
+  const s = String(listing.display_status || listing.status || "").toLowerCase();
+  const isLive = s === "active" || s === "live now";
   const bid = listing.current_highest_bid || listing.starting_price;
   const house = listing.brand || listing.house || listing.category || "";
 

@@ -7,6 +7,15 @@ from .models import Bid, Listing
 class ListingSerializer(serializers.ModelSerializer):
     """Serialize a listing for public/detail views (no bidder identities)."""
 
+    status = serializers.SerializerMethodField()
+    display_status = serializers.SerializerMethodField()
+
+    def get_status(self, obj):
+        return obj.get_runtime_status()
+
+    def get_display_status(self, obj):
+        return obj.get_display_status()
+
     class Meta:
         model = Listing
         fields = [
@@ -20,6 +29,7 @@ class ListingSerializer(serializers.ModelSerializer):
             "starts_at",
             "ends_at",
             "status",
+            "display_status",
             "current_highest_bid",
             "created_at",
             "updated_at",

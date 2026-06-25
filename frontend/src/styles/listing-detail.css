@@ -827,9 +827,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
+  background: #fdf3dc;
   border: 2px solid #c8a84b;
   color: #9a7a2a;
   font-size: 20px;
