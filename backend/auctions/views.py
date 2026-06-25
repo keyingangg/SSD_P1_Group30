@@ -105,7 +105,15 @@ class ListingDetailView(APIView):
             return Response({"detail": "Listing not found."}, status=404)
 
         serializer = ListingSerializer(listing)
-        return Response(serializer.data)
+        data = serializer.data
+
+        if request.user.is_authenticated and not request.user.is_staff:
+            user_top_bid = listing.bids.filter(bidder=request.user).order_by("-amount").first()
+            data = dict(data)
+            data["user_won"] = listing.winner_id == request.user.id
+            data["user_highest_bid"] = str(user_top_bid.amount) if user_top_bid else None
+
+        return Response(data)
 
 
 class ListingCreateView(APIView):

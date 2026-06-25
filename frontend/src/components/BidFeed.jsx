@@ -37,19 +37,21 @@ export default function BidFeed({ listingId, bids: bidsProp, isClosed = false, u
         </p>
       ) : (
         <div className="ld-bid-rows">
-          {bids.slice(0, 5).map((bid, i) => {
+          {bids.slice(0, 6).map((bid, i) => {
             const isWinner = isClosed && i === 0;
             const isHighest = !isClosed && i === 0;
             const isTop = isWinner || isHighest;
+            const isYourBid = isClosed && !isWinner && userHighestBid > 0 && Number(bid.amount) === userHighestBid;
             return (
-              <div key={bid.id ?? i} className={`ld-bid-row${isTop ? " ld-bid-row--top" : ""}`}>
+              <div key={bid.id ?? i} className={`ld-bid-row${isTop ? " ld-bid-row--top" : ""}${isYourBid ? " ld-bid-row--yours" : ""}`}>
                 <span className={`ld-bid-row-rank${isTop ? " top" : ""}`}>
                   #{bids.length - i}
                 </span>
-                <span className="ld-bid-row-name">{bid.anonymous_identifier ?? bid.bidder ?? "—"}</span>
-                {isWinner && <span className="ld-bid-row-badge ld-bid-row-badge--winner">Winner</span>}
+                <span className={`ld-bid-row-name${isYourBid ? " yours" : ""}`}>{bid.anonymous_identifier ?? bid.bidder ?? "—"}</span>
+                {isWinner && <span className="ld-bid-row-badge ld-bid-row-badge--winner">WINNER</span>}
                 {isHighest && <span className="ld-bid-row-badge ld-bid-row-badge--highest">Highest</span>}
-                <span className={`ld-bid-row-amount${isTop ? " top" : ""}`}>
+                {isYourBid && <span className="ld-bid-row-badge ld-bid-row-badge--yours">YOUR BID</span>}
+                <span className={`ld-bid-row-amount${isTop ? " top" : ""}${isYourBid ? " yours" : ""}`}>
                   {formatSGD(bid.amount)}
                 </span>
                 {!isClosed && (

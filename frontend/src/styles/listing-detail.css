@@ -951,6 +951,14 @@
   background: var(--ink);
   color: #fff;
 }
+.ld-bid-row-badge--yours {
+  background: transparent;
+  color: var(--gold-dark);
+  border: 1px solid var(--gold-dark);
+}
+.ld-bid-row--yours { background: rgba(194,161,90,.06); }
+.ld-bid-row-name.yours { color: var(--gold-dark); font-weight: 600; }
+.ld-bid-row-amount.yours { color: var(--gold-dark); }
 .ld-bid-row-amount {
   font-weight: 700;
   color: var(--ink);

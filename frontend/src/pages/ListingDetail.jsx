@@ -159,7 +159,7 @@ export default function ListingDetail() {
             {/* Right panel */}
             <div className="ld-right">
               {/* Bid placed banner */}
-              {lastPlacedBid && !rejectedMinBid && !isAdmin && (
+              {lastPlacedBid && !rejectedMinBid && !isAdmin && !isClosed && (
                 <div className="ld-bid-placed-banner">
                   <div className="ld-bid-placed-icon">✓</div>
                   <div className="ld-bid-placed-tag">BID PLACED</div>
@@ -178,7 +178,7 @@ export default function ListingDetail() {
               )}
 
               {/* Bid conflict banner (HTTP 409 — race condition) */}
-              {conflictMinBid && (
+              {conflictMinBid && !isClosed && (
                 <div className="ld-bid-conflict-banner">
                   <div className="ld-bid-conflict-icon">!</div>
                   <div className="ld-bid-conflict-tag">BID CONFLICT</div>
@@ -195,7 +195,7 @@ export default function ListingDetail() {
               )}
 
               {/* Bid rejected banner */}
-              {rejectedMinBid && (
+              {rejectedMinBid && !isClosed && (
                 <div className="ld-bid-rejected-banner">
                   <div className="ld-bid-rejected-icon">!</div>
                   <div className="ld-bid-rejected-tag">BID REJECTED</div>
