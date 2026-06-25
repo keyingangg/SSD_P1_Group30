@@ -4,8 +4,17 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import Logo from "./Logo.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 
-// These routes manage their own full-screen layout.
 const HIDDEN_ON = ["/", "/login", "/register", "/verify-email", "/forgot-password", "/reset-password", "/accept-invite"];
+
+const ADMIN_NAV = [
+  { label: "Overview",     to: "/admin/overview" },
+  { label: "Listings",     to: "/admin/listings" },
+  { label: "Live Monitor", to: "/admin/live-monitor" },
+  { label: "Orders",       to: "/admin/orders" },
+  { label: "Users",        to: "/admin/users" },
+  { label: "Audit Log",    to: "/admin/audit-log" },
+  { label: "Settings",     to: "/admin/settings" },
+];
 
 function initials(user) {
   if (!user) return "";
@@ -20,7 +29,10 @@ export default function Navbar() {
   const [dropdownOpen, setDropdownOpen]       = useState(false);
   const [confirmingLogout, setConfirmingLogout] = useState(false);
 
-  if (HIDDEN_ON.includes(pathname) || pathname.startsWith("/admin")) return null;
+  if (HIDDEN_ON.includes(pathname)) return null;
+
+  const isAdmin = user?.is_staff === true;
+  const isAdminRoute = pathname.startsWith("/admin");
 
   const handleLogout = async () => {
     setDropdownOpen(false);
@@ -32,22 +44,37 @@ export default function Navbar() {
   const closeDropdown = () => { setDropdownOpen(false); setConfirmingLogout(false); };
 
   return (
-    <nav className="nav-bar">
-      <Link to="/auctions"><Logo /></Link>
+    <nav className={`nav-bar${isAdminRoute ? " nav-bar--admin" : ""}`}>
+      <Link to={isAdmin ? "/admin/overview" : "/auctions"}><Logo /></Link>
 
       <div className="nav-links">
-        <Link to="/auctions" className={`nav-link${pathname === "/auctions" ? " active" : ""}`}>
-          Auctions
-        </Link>
-        {!user?.is_staff && (
-          <Link to="/dashboard" className={`nav-link${pathname === "/dashboard" ? " active" : ""}`}>
-            Dashboard
-          </Link>
-        )}
-        {user?.is_staff && (
-          <Link to="/admin/overview" className={`nav-link${pathname.startsWith("/admin") ? " active" : ""}`}>
-            Admin
-          </Link>
+        {isAdminRoute ? (
+          <>
+            {ADMIN_NAV.map(({ label, to }) => (
+              <Link key={to} to={to} className={`nav-link${pathname === to ? " active" : ""}`}>
+                {label}
+              </Link>
+            ))}
+            <Link to="/auctions" className="nav-link">
+              Auctions
+            </Link>
+          </>
+        ) : (
+          <>
+            <Link to="/auctions" className={`nav-link${pathname === "/auctions" ? " active" : ""}`}>
+              Auctions
+            </Link>
+            {!isAdmin && (
+              <Link to="/dashboard" className={`nav-link${pathname === "/dashboard" ? " active" : ""}`}>
+                Dashboard
+              </Link>
+            )}
+            {isAdmin && (
+              <Link to="/admin/overview" className="nav-link">
+                Admin
+              </Link>
+            )}
+          </>
         )}
       </div>
 

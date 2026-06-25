@@ -16,6 +16,12 @@
 }
 .nav-link:hover { color: #7F5B1C; text-decoration: none; }
 .nav-link.active { color: #7F5B1C; font-weight: 400; }
+
+/* Admin navbar — compact spacing for 8 links */
+.nav-bar--admin { padding: 0 32px; }
+.nav-bar--admin .nav-links { margin-left: 24px; }
+.nav-bar--admin .nav-link { margin-right: 24px; font-size: 12.5px; }
+.nav-bar--admin .nav-link:last-child { margin-right: 0; margin-left: 16px; padding-left: 16px; border-left: 1px solid #E0DCD6; }
 .nav-right {
   display: flex; align-items: center; gap: 0; margin-left: auto; position: relative;
 }

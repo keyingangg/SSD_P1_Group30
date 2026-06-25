@@ -123,7 +123,6 @@ class ListingCreateView(APIView):
         save_as_draft = data.get("save_as_draft", False)
         now = timezone.now()
 
-        # Normalize image_key: store None when blank to keep DB consistent.
         img_key = data.get("image_key")
         if isinstance(img_key, str) and img_key.strip() == "":
             img_key = None

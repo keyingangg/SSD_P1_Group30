@@ -15,11 +15,6 @@ _VALID_CATEGORIES = [choice[0] for choice in Listing.CATEGORY_CHOICES]
 
 
 def _image_signed_url(image_key):
-    """Convert a stored object key into a short-lived signed URL for clients.
-
-    Images must only ever be served via signed URLs, never the raw object
-    key or a public bucket URL (NFSR-C-07 / SFR-11e).
-    """
     if not image_key:
         return None
     try:
@@ -52,12 +47,16 @@ class ListingSerializer(serializers.ModelSerializer):
 
     image_url = serializers.SerializerMethodField()
     display_status = serializers.SerializerMethodField()
+    bid_count = serializers.SerializerMethodField()
 
     def get_image_url(self, obj):
         return _image_signed_url(obj.image_key)
 
     def get_display_status(self, obj):
         return obj.get_display_status()
+
+    def get_bid_count(self, obj):
+        return obj.bids.count()
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -81,6 +80,7 @@ class ListingSerializer(serializers.ModelSerializer):
             "ends_at",
             "status",
             "display_status",
+            "bid_count",
             "current_highest_bid",
             "created_at",
             "updated_at",
