@@ -37,4 +37,9 @@ urlpatterns = [
         views.BidSubmitView.as_view(),
         name="bid-submit",
     ),
+    path(
+        "<uuid:listing_id>/cancel/",
+        views.ListingCancelView.as_view(),
+        name="listing-cancel",
+    ),
 ]

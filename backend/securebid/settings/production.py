@@ -5,6 +5,21 @@ from .base import *  # noqa: F401,F403
 
 DEBUG = False
 
+# Hard-stop: if someone accidentally sets DJANGO_DEBUG=true in production the
+# server refuses to start rather than silently leaking stack traces
+# (NFSR-C-05 / AR-10).
+if os.environ.get("DJANGO_DEBUG", "false").lower() == "true":
+    raise RuntimeError(
+        "DJANGO_DEBUG must not be 'true' in the production environment. "
+        "Refusing to start to prevent information disclosure."
+    )
+
+# Suppress all variable values from Django's own error reporter so that even
+# if an error somehow bypasses our custom handler, no internal details are shown.
+DEFAULT_EXCEPTION_REPORTER_FILTER = (
+    "django.views.debug.SafeExceptionReporterFilter"
+)
+
 ALLOWED_HOSTS = [
     host.strip()
     for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",")

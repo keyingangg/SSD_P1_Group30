@@ -69,7 +69,7 @@ class PasswordResetRequestSerializer(serializers.Serializer):
 class PasswordResetConfirmSerializer(serializers.Serializer):
     """Validate a password reset confirmation (token + new password)."""
 
-    token = serializers.CharField()
+    token = serializers.CharField(max_length=512)
     password = serializers.CharField(
         write_only=True, min_length=12, max_length=128, trim_whitespace=False
     )
@@ -121,8 +121,10 @@ class AdminUserListSerializer(serializers.ModelSerializer):
 class AcceptInviteSerializer(serializers.Serializer):
     """Validate an invite acceptance (token + display name + password)."""
 
-    token = serializers.CharField()
-    display_name = serializers.CharField(max_length=100)
+    # Max token length prevents oversized payloads from reaching the DB lookup
+    # (NFSR-IN-03).
+    token = serializers.CharField(max_length=512)
+    display_name = serializers.CharField(min_length=1, max_length=100)
     password = serializers.CharField(
         write_only=True, min_length=12, max_length=128, trim_whitespace=False
     )
