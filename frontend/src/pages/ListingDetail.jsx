@@ -6,6 +6,7 @@ import AuctionExtendedDetails from "../components/AuctionExtendedDetails.jsx";
 import BidFeed from "../components/BidFeed.jsx";
 import BidForm from "../components/BidForm.jsx";
 import CountdownTimer from "../components/CountdownTimer.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
 import { useBidFeed } from "../hooks/useBidFeed.js";
 import "../styles/listing-detail.css";
 
@@ -33,6 +34,8 @@ function formatDateTime(value) {
 
 export default function ListingDetail() {
   const { id } = useParams();
+  const { user } = useAuth();
+  const isAdmin = user?.is_staff === true;
   const [listing, setListing] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -360,16 +363,18 @@ export default function ListingDetail() {
                           )}
                         </div>
 
-                        {/* Bid form */}
-                        <div className="ld-panel-section">
-                          <BidForm
-                            listingId={id}
-                            listing={listing}
-                            onBidPlaced={(amt) => { setRejectedMinBid(null); setConflictMinBid(null); handleBidPlaced(amt); }}
-                            onBidRejected={(minBid) => { setConflictMinBid(null); setRejectedMinBid(minBid); }}
-                            onBidConflict={(minBid) => { setRejectedMinBid(null); setConflictMinBid(minBid); refreshListing(); }}
-                          />
-                        </div>
+                        {/* Bid form — hidden for admins */}
+                        {!isAdmin && (
+                          <div className="ld-panel-section">
+                            <BidForm
+                              listingId={id}
+                              listing={listing}
+                              onBidPlaced={(amt) => { setRejectedMinBid(null); setConflictMinBid(null); handleBidPlaced(amt); }}
+                              onBidRejected={(minBid) => { setConflictMinBid(null); setRejectedMinBid(minBid); }}
+                              onBidConflict={(minBid) => { setRejectedMinBid(null); setConflictMinBid(minBid); refreshListing(); }}
+                            />
+                          </div>
+                        )}
 
                         {/* Live bid history */}
                         <div className="ld-panel-section">

@@ -51,9 +51,13 @@ class ListingSerializer(serializers.ModelSerializer):
     """
 
     image_url = serializers.SerializerMethodField()
+    display_status = serializers.SerializerMethodField()
 
     def get_image_url(self, obj):
         return _image_signed_url(obj.image_key)
+
+    def get_display_status(self, obj):
+        return obj.get_display_status()
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

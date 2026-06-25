@@ -2,7 +2,7 @@ import axiosClient from "./axiosClient.js";
 
 export async function getListings() {
   const { data } = await axiosClient.get("/auctions/");
-  return data;
+  return Array.isArray(data) ? data : (data.results ?? []);
 }
 
 export async function getListingDetail(listingId) {

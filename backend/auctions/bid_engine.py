@@ -2,6 +2,7 @@
 
 from decimal import Decimal, InvalidOperation
 
+from django.core.exceptions import PermissionDenied
 from django.db import OperationalError, transaction
 from django.utils import timezone
 
@@ -45,10 +46,10 @@ def submit_bid(listing_id, user, amount, ip_address=None, user_agent=""):
         # OperationalError (lock not acquired) propagates to the view → HTTP 409
 
         if listing.created_by_id == user.id:
-            raise ValueError("You cannot bid on your own listing.")
+            raise PermissionDenied("You cannot bid on your own listing.")
 
         if getattr(user, "is_staff", False):
-            raise ValueError("Admins cannot place bids.")
+            raise PermissionDenied("Admins cannot place bids.")
 
         runtime_status = listing.get_runtime_status(now=timezone.now())
         if runtime_status != "active":

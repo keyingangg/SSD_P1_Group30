@@ -3,6 +3,7 @@ import logging
 from datetime import timedelta
 from decimal import Decimal
 
+from django.core.exceptions import PermissionDenied
 from django.db import OperationalError
 from django.db.models import Count, OuterRef, Q, Subquery
 from django.utils import timezone
@@ -325,6 +326,23 @@ class BidSubmitView(APIView):
                 },
             )
             return Response({"detail": "Listing not found."}, status=404)
+        except PermissionDenied as exc:
+            log_action(
+                user=request.user,
+                action="bid_forbidden",
+                resource_type="Listing",
+                resource_id=listing_id,
+                ip_address=ip,
+                user_agent=ua,
+                metadata={
+                    "listing_id": str(listing_id),
+                    "attempted_amount": str(amount_raw),
+                    "reason": str(exc),
+                    "user_role": "staff" if getattr(request.user, "is_staff", False) else "user",
+                    "security_event": True,
+                },
+            )
+            return Response({"detail": str(exc)}, status=403)
         except ValueError as exc:
             log_action(
                 user=request.user,

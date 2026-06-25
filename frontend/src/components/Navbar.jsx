@@ -39,9 +39,11 @@ export default function Navbar() {
         <Link to="/auctions" className={`nav-link${pathname === "/auctions" ? " active" : ""}`}>
           Auctions
         </Link>
-        <Link to="/dashboard" className={`nav-link${pathname === "/dashboard" ? " active" : ""}`}>
-          Dashboard
-        </Link>
+        {!user?.is_staff && (
+          <Link to="/dashboard" className={`nav-link${pathname === "/dashboard" ? " active" : ""}`}>
+            Dashboard
+          </Link>
+        )}
         {user?.is_staff && (
           <Link to="/admin/overview" className={`nav-link${pathname.startsWith("/admin") ? " active" : ""}`}>
             Admin
@@ -95,9 +97,11 @@ export default function Navbar() {
                 </>
               ) : (
                 <>
-                  <Link to="/dashboard" onClick={closeDropdown}>
-                    My Dashboard
-                  </Link>
+                  {!user?.is_staff && (
+                    <Link to="/dashboard" onClick={closeDropdown}>
+                      My Dashboard
+                    </Link>
+                  )}
                   <Link to="/account-settings" onClick={closeDropdown}>
                     Account Settings
                   </Link>
