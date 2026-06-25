@@ -1,6 +1,6 @@
 import { useBidFeed } from "../hooks/useBidFeed.js";
 
-function timeAgo(timestamp) {
+export function timeAgo(timestamp) {
   if (!timestamp) return "";
   const diffMs = Date.now() - new Date(timestamp).getTime();
   const diffSec = Math.floor(diffMs / 1000);
@@ -15,8 +15,9 @@ function formatSGD(n) {
   return `S$${Number(n).toLocaleString("en-SG", { minimumFractionDigits: 0 })}`;
 }
 
-export default function BidFeed({ listingId, isClosed = false, userHighestBid = 0 }) {
-  const { bids } = useBidFeed(listingId);
+export default function BidFeed({ listingId, bids: bidsProp, isClosed = false, userHighestBid = 0 }) {
+  const { bids: fetchedBids } = useBidFeed(bidsProp == null ? listingId : null);
+  const bids = bidsProp ?? fetchedBids;
 
   return (
     <div>
@@ -38,20 +39,21 @@ export default function BidFeed({ listingId, isClosed = false, userHighestBid = 
         <div className="ld-bid-rows">
           {bids.map((bid, i) => {
             const isWinner = isClosed && i === 0;
-            const isYourBid = userHighestBid > 0 && Number(bid.amount) === userHighestBid;
+            const isHighest = !isClosed && i === 0;
+            const isTop = isWinner || isHighest;
             return (
-              <div key={bid.id ?? i} className="ld-bid-row">
-                <span className={`ld-bid-row-rank${isWinner ? " winner" : isYourBid ? " yourbid" : ""}`}>
+              <div key={bid.id ?? i} className={`ld-bid-row${isTop ? " ld-bid-row--top" : ""}`}>
+                <span className={`ld-bid-row-rank${isTop ? " top" : ""}`}>
                   #{bids.length - i}
                 </span>
-                <span className="ld-bid-row-name">{bid.bidder ?? "—"}</span>
-                {isWinner && <span className="ld-bid-row-winner">Winner</span>}
-                {isYourBid && !isWinner && <span className="ld-bid-row-yourbid">Your Bid</span>}
-                <span className={`ld-bid-row-amount${isWinner ? " winner" : isYourBid ? " yourbid" : ""}`}>
+                <span className="ld-bid-row-name">{bid.anonymous_identifier ?? bid.bidder ?? "—"}</span>
+                {isWinner && <span className="ld-bid-row-badge ld-bid-row-badge--winner">Winner</span>}
+                {isHighest && <span className="ld-bid-row-badge ld-bid-row-badge--highest">Highest</span>}
+                <span className={`ld-bid-row-amount${isTop ? " top" : ""}`}>
                   {formatSGD(bid.amount)}
                 </span>
                 {!isClosed && (
-                  <span className="ld-bid-row-time">{timeAgo(bid.created_at)}</span>
+                  <span className="ld-bid-row-time">{timeAgo(bid.submitted_at)}</span>
                 )}
               </div>
             );

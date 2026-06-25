@@ -39,6 +39,11 @@ export async function submitBid(listingId, amount) {
   return data;
 }
 
+export async function getListingBids(listingId) {
+  const { data } = await axiosClient.get(`/auctions/${listingId}/bids/`);
+  return data;
+}
+
 // TODO: GET /auctions/bids/history/
 export async function getUserBidHistory() {
   const { data } = await axiosClient.get("/auctions/bids/history/");

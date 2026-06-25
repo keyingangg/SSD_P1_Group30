@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { submitBid } from "../api/auctions.js";
 
-export default function BidForm({ listingId, listing, onSubmit }) {
+export default function BidForm({ listingId, listing, onBidPlaced, onBidRejected }) {
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
   const runtimeStatus = String(listing?.status || "").toLowerCase();
   const displayStatus = String(listing?.display_status || "").toLowerCase();
@@ -46,14 +45,13 @@ export default function BidForm({ listingId, listing, onSubmit }) {
   }, [minimumIncrement]);
 
   const applyQuick = (inc) => {
-    const base = currentHighestBid > 0 ? currentHighestBid : startingPrice;
-    setAmount((base + inc).toFixed(2));
+    const current = Number(amount) || minimumAllowedBid || 0;
+    setAmount((current + inc).toFixed(2));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    setSuccess("");
 
     if (!isActive) {
       setError("Bidding is available only when the auction is live.");
@@ -64,18 +62,24 @@ export default function BidForm({ listingId, listing, onSubmit }) {
       return;
     }
     if (minimumAllowedBid > 0 && Number(amount) < minimumAllowedBid) {
-      setError(`Bid must be at least $${minimumAllowedBid.toFixed(2)}.`);
+      if (typeof onBidRejected === "function") onBidRejected(minimumAllowedBid);
       return;
     }
 
     try {
       setSubmitting(true);
+      const placed = Number(amount);
       await submitBid(listingId, amount);
-      setSuccess("Bid submitted successfully.");
       setAmount(minimumAllowedBid > 0 ? minimumAllowedBid.toFixed(2) : "");
-      if (typeof onSubmit === "function") onSubmit();
+      if (typeof onBidPlaced === "function") onBidPlaced(placed);
     } catch (err) {
-      setError(err?.response?.data?.detail || "Unable to submit bid.");
+      const detail = err?.response?.data?.detail || "Unable to submit bid.";
+      const isTooLow = /minimum|increment|at least|too low/i.test(detail);
+      if (isTooLow && typeof onBidRejected === "function") {
+        onBidRejected(minimumAllowedBid);
+      } else {
+        setError(detail);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -94,7 +98,6 @@ export default function BidForm({ listingId, listing, onSubmit }) {
         <input
           id="bid-amount"
           type="number"
-          min={minimumAllowedBid > 0 ? minimumAllowedBid.toFixed(2) : "0"}
           step="0.01"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
@@ -153,7 +156,6 @@ export default function BidForm({ listingId, listing, onSubmit }) {
       <p className="ld-bid-footnote">Bids are binding contracts · Authentication required</p>
 
       {error && <div className="ld-bid-msg-error">{error}</div>}
-      {success && <div className="ld-bid-msg-success">{success}</div>}
     </form>
   );
 }

@@ -1,15 +1,26 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { useWebSocket } from "./useWebSocket.js";
+import { getListingBids } from "../api/auctions.js";
 
-// Combines the live WebSocket feed with a REST polling fallback so bid
-// updates continue even if the socket drops during an active auction.
 export function useBidFeed(listingId) {
   const [bids, setBids] = useState([]);
-  const { lastMessage } = useWebSocket(listingId);
+  const intervalRef = useRef(null);
 
-  // TODO: append/merge lastMessage into bids; if socket is unavailable,
-  // poll the REST endpoint at intervals not exceeding 5 seconds.
+  async function fetchBids() {
+    try {
+      const data = await getListingBids(listingId);
+      setBids(data);
+    } catch {
+      // silently ignore polling errors
+    }
+  }
 
-  return { bids };
+  useEffect(() => {
+    if (!listingId) return () => {};
+    fetchBids();
+    intervalRef.current = setInterval(fetchBids, 5000);
+    return () => clearInterval(intervalRef.current);
+  }, [listingId]);
+
+  return { bids, refresh: fetchBids };
 }

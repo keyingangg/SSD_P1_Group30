@@ -162,16 +162,62 @@ class BidSubmitView(APIView):
         serializer = BidSubmitSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        ip = request.META.get("REMOTE_ADDR")
+        ua = request.META.get("HTTP_USER_AGENT", "")
+        amount_raw = serializer.validated_data["amount"]
+
         try:
             bid, listing = submit_bid(
                 listing_id=listing_id,
                 user=request.user,
-                amount=serializer.validated_data["amount"],
+                amount=amount_raw,
             )
         except LookupError:
+            log_action(
+                user=request.user,
+                action="bid_rejected",
+                resource_type="Listing",
+                resource_id=listing_id,
+                ip_address=ip,
+                user_agent=ua,
+                metadata={
+                    "listing_id": str(listing_id),
+                    "attempted_amount": str(amount_raw),
+                    "reason": "listing_not_found",
+                    "user_role": "staff" if getattr(request.user, "is_staff", False) else "user",
+                },
+            )
             return Response({"detail": "Listing not found."}, status=404)
         except ValueError as exc:
+            log_action(
+                user=request.user,
+                action="bid_rejected",
+                resource_type="Listing",
+                resource_id=listing_id,
+                ip_address=ip,
+                user_agent=ua,
+                metadata={
+                    "listing_id": str(listing_id),
+                    "attempted_amount": str(amount_raw),
+                    "reason": str(exc),
+                    "user_role": "staff" if getattr(request.user, "is_staff", False) else "user",
+                },
+            )
             return Response({"detail": str(exc)}, status=400)
+
+        log_action(
+            user=request.user,
+            action="bid_placed",
+            resource_type="Bid",
+            resource_id=bid.id,
+            ip_address=ip,
+            user_agent=ua,
+            metadata={
+                "listing_id": str(listing.id),
+                "amount": str(bid.amount),
+                "user_role": "staff" if getattr(request.user, "is_staff", False) else "user",
+            },
+        )
 
         return Response(
             {
@@ -184,6 +230,20 @@ class BidSubmitView(APIView):
             },
             status=201,
         )
+
+
+class ListingBidsView(APIView):
+    """Return all bids for a listing, newest first. Public read."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request, listing_id):
+        bids = (
+            Bid.objects.filter(listing_id=listing_id)
+            .order_by("-submitted_at", "-id")
+            .values("id", "anonymous_identifier", "amount", "submitted_at", "is_winning")
+        )
+        return Response(list(bids))
 
 
 class UserBidHistoryView(APIView):

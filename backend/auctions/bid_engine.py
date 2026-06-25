@@ -57,14 +57,6 @@ def submit_bid(listing_id, user, amount):
           f"Bid must be at least {minimum_allowed:.2f}."
         )
 
-      latest_bid = (
-        Bid.objects.filter(listing=listing)
-        .order_by("-submitted_at", "-id")
-        .first()
-      )
-      if latest_bid and latest_bid.bidder_id == user.id:
-        raise ValueError("You cannot place consecutive bids on the same listing.")
-
       anonymous_identifier = f"Bidder #{str(user.id).replace('-', '')[-4:]}"
 
       bid = Bid.objects.create(

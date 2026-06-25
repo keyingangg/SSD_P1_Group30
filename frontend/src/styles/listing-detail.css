@@ -689,6 +689,131 @@
   margin-top: 6px;
 }
 
+/* Bid placed success banner */
+.ld-bid-placed-banner {
+  margin-bottom: 14px;
+  padding: 28px 24px 20px;
+  background: #edf4ef;
+  border: 1px solid #c2dbc9;
+  border-radius: 0;
+  text-align: center;
+}
+.ld-bid-placed-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #d6ecdf;
+  border: 1.5px solid #3a7c5a;
+  color: #3a7c5a;
+  font-size: 22px;
+  font-weight: 300;
+  margin-bottom: 14px;
+}
+.ld-bid-placed-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #3a7c5a;
+  margin-bottom: 10px;
+}
+.ld-bid-placed-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #14231c;
+  margin-bottom: 10px;
+  line-height: 1.25;
+  font-family: Georgia, "Times New Roman", serif;
+}
+.ld-bid-placed-desc {
+  font-size: 13px;
+  color: #4a6e58;
+  max-width: 320px;
+  margin: 0 auto 16px;
+  line-height: 1.5;
+}
+.ld-bid-placed-divider {
+  border-top: 1px solid #c2dbc9;
+  margin-bottom: 14px;
+}
+.ld-bid-placed-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #4a6e58;
+}
+.ld-bid-placed-row-amount {
+  font-size: 16px;
+  font-weight: 700;
+  color: #3a7c5a;
+}
+
+/* Bid rejected banner */
+.ld-bid-rejected-banner {
+  margin-bottom: 14px;
+  padding: 28px 24px 20px;
+  background: #faf7f0;
+  border: 1px solid #d9cba8;
+  border-radius: 0;
+  text-align: center;
+}
+.ld-bid-rejected-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #fdf3dc;
+  border: 1.5px solid #c9a84c;
+  color: #9a7a2a;
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+.ld-bid-rejected-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #9a7a2a;
+  margin-bottom: 10px;
+}
+.ld-bid-rejected-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #1a1a12;
+  margin-bottom: 10px;
+  font-family: Georgia, "Times New Roman", serif;
+}
+.ld-bid-rejected-desc {
+  font-size: 13px;
+  color: #6b6045;
+  max-width: 320px;
+  margin: 0 auto 16px;
+  line-height: 1.5;
+}
+.ld-bid-rejected-divider {
+  border-top: 1px solid #d9cba8;
+  margin-bottom: 14px;
+}
+.ld-bid-rejected-min {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #6b6045;
+}
+.ld-bid-rejected-min-amount {
+  font-size: 16px;
+  font-weight: 700;
+  color: #9a7a2a;
+}
+
 /* Bid history */
 .ld-history-header {
   display: flex;
@@ -724,61 +849,62 @@
   animation: ld-pulse 1.4s ease-in-out infinite;
 }
 
-.ld-bid-rows { display: grid; gap: 6px; }
+.ld-bid-rows { display: grid; gap: 0; }
 .ld-bid-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 14px;
-  background: rgba(255,255,255,0.45);
-  border: 1px solid var(--line);
+  padding: 14px 16px;
+  background: transparent;
+  border-bottom: 1px solid var(--line);
   font-size: 13px;
+}
+.ld-bid-row--top {
+  background: rgba(255,255,255,0.55);
 }
 .ld-bid-row-rank {
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--muted);
   width: 28px;
   flex-shrink: 0;
 }
-.ld-bid-row-rank.winner { color: #3a7d55; }
-.ld-bid-row-rank.yourbid { color: var(--gold-dark); }
+.ld-bid-row-rank.top { color: #3a7d55; }
 .ld-bid-row-name {
   flex: 1;
   color: var(--ink-soft);
   font-weight: 500;
 }
-.ld-bid-row-winner {
-  background: var(--ink);
-  color: #fff;
+.ld-bid-row-badge {
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  padding: 3px 8px;
+  padding: 4px 10px;
   flex-shrink: 0;
 }
-.ld-bid-row-yourbid {
-  border: 1px solid var(--gold);
-  color: var(--gold-dark);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  padding: 3px 8px;
-  flex-shrink: 0;
+.ld-bid-row-badge--highest {
+  background: var(--gold-dark);
+  color: #fff;
+}
+.ld-bid-row-badge--winner {
+  background: var(--ink);
+  color: #fff;
 }
 .ld-bid-row-amount {
   font-weight: 700;
   color: var(--ink);
   white-space: nowrap;
+  min-width: 90px;
+  text-align: right;
 }
-.ld-bid-row-amount.winner { color: var(--gold-dark); }
-.ld-bid-row-amount.yourbid { color: var(--gold-dark); }
+.ld-bid-row-amount.top { color: var(--gold-dark); }
 .ld-bid-row-time {
   font-size: 11px;
   color: var(--muted);
   white-space: nowrap;
+  min-width: 55px;
+  text-align: right;
 }
 .ld-history-footer {
   text-align: center;

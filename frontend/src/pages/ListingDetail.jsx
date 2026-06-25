@@ -6,6 +6,7 @@ import AuctionExtendedDetails from "../components/AuctionExtendedDetails.jsx";
 import BidFeed from "../components/BidFeed.jsx";
 import BidForm from "../components/BidForm.jsx";
 import CountdownTimer from "../components/CountdownTimer.jsx";
+import { useBidFeed } from "../hooks/useBidFeed.js";
 import "../styles/listing-detail.css";
 
 function formatSGD(value) {
@@ -35,11 +36,34 @@ export default function ListingDetail() {
   const [listing, setListing] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [rejectedMinBid, setRejectedMinBid] = useState(null);
+  const storageKey = `bid_placed_${id}`;
+  const [lastPlacedBid, setLastPlacedBid] = useState(() => {
+    const saved = localStorage.getItem(storageKey);
+    return saved ? Number(saved) : null;
+  });
+  const { bids } = useBidFeed(id);
 
   async function refreshListing() {
     const data = await getListingDetail(id);
     setListing(data);
   }
+
+  function handleBidPlaced(amount) {
+    localStorage.setItem(storageKey, amount);
+    setLastPlacedBid(amount);
+    refreshListing();
+  }
+
+  // Dismiss the banner when someone else bids higher
+  useEffect(() => {
+    if (!lastPlacedBid || bids.length === 0) return;
+    const topBid = Number(bids[0]?.amount);
+    if (topBid > lastPlacedBid) {
+      localStorage.removeItem(storageKey);
+      setLastPlacedBid(null);
+    }
+  }, [bids]);
 
   useEffect(() => {
     let active = true;
@@ -130,6 +154,42 @@ export default function ListingDetail() {
 
             {/* Right panel */}
             <div className="ld-right">
+              {/* Bid placed banner */}
+              {lastPlacedBid && !rejectedMinBid && (
+                <div className="ld-bid-placed-banner">
+                  <div className="ld-bid-placed-icon">✓</div>
+                  <div className="ld-bid-placed-tag">BID PLACED</div>
+                  <div className="ld-bid-placed-title">
+                    Your bid of {formatSGD(lastPlacedBid)} is now the highest
+                  </div>
+                  <div className="ld-bid-placed-desc">
+                    All other bidders have been notified · Live update sent via WebSocket
+                  </div>
+                  <div className="ld-bid-placed-divider" />
+                  <div className="ld-bid-placed-row">
+                    <span>Current leading bid:</span>
+                    <span className="ld-bid-placed-row-amount">{formatSGD(lastPlacedBid)}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Bid rejected banner */}
+              {rejectedMinBid && (
+                <div className="ld-bid-rejected-banner">
+                  <div className="ld-bid-rejected-icon">!</div>
+                  <div className="ld-bid-rejected-tag">BID REJECTED</div>
+                  <div className="ld-bid-rejected-title">Bid Amount Too Low</div>
+                  <div className="ld-bid-rejected-desc">
+                    Your bid must exceed the current highest bid by the minimum increment.
+                  </div>
+                  <div className="ld-bid-rejected-divider" />
+                  <div className="ld-bid-rejected-min">
+                    <span>Minimum valid bid:</span>
+                    <span className="ld-bid-rejected-min-amount">{formatSGD(rejectedMinBid)}</span>
+                  </div>
+                </div>
+              )}
+
               <div className="ld-panel">
 
                 {/* ── CLOSED STATE ── */}
@@ -284,12 +344,17 @@ export default function ListingDetail() {
 
                         {/* Bid form */}
                         <div className="ld-panel-section">
-                          <BidForm listingId={id} listing={listing} onSubmit={refreshListing} />
+                          <BidForm
+                            listingId={id}
+                            listing={listing}
+                            onBidPlaced={(amt) => { setRejectedMinBid(null); handleBidPlaced(amt); }}
+                            onBidRejected={(minBid) => { setRejectedMinBid(minBid); }}
+                          />
                         </div>
 
                         {/* Live bid history */}
                         <div className="ld-panel-section">
-                          <BidFeed listingId={id} isClosed={false} userHighestBid={0} />
+                          <BidFeed bids={bids} isClosed={false} userHighestBid={0} />
                         </div>
                       </>
                     ) : (
