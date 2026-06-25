@@ -359,6 +359,33 @@ class BidSubmitView(APIView):
                 },
             )
             return Response({"detail": str(exc)}, status=400)
+        except Exception:
+            # Fail-closed: any unhandled exception rolls back the transaction.
+            # Log full detail server-side; return generic message to client (NFSR-AV-04).
+            logger = logging.getLogger(__name__)
+            logger.exception(
+                "Unhandled exception during bid submission for listing %s by user %s",
+                listing_id,
+                getattr(request.user, "id", "unknown"),
+            )
+            log_action(
+                user=request.user,
+                action="bid_error",
+                resource_type="Listing",
+                resource_id=listing_id,
+                ip_address=ip,
+                user_agent=ua,
+                metadata={
+                    "listing_id": str(listing_id),
+                    "attempted_amount": str(amount_raw),
+                    "user_role": "staff" if getattr(request.user, "is_staff", False) else "user",
+                    "security_event": True,
+                },
+            )
+            return Response(
+                {"detail": "An unexpected error occurred. Your bid was not placed."},
+                status=500,
+            )
         # bid_placed audit log is written inside the atomic block in submit_bid
 
         return Response(

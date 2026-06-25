@@ -62,32 +62,37 @@ def submit_bid(listing_id, user, amount, ip_address=None, user_agent=""):
 
         anonymous_identifier = f"Bidder #{str(user.id).replace('-', '')[-4:]}"
 
-        bid = Bid.objects.create(
-            listing=listing,
-            bidder=user,
-            anonymous_identifier=anonymous_identifier,
-            amount=bid_amount,
-            is_winning=True,
-        )
+        try:
+            bid = Bid.objects.create(
+                listing=listing,
+                bidder=user,
+                anonymous_identifier=anonymous_identifier,
+                amount=bid_amount,
+                is_winning=True,
+            )
 
-        Bid.objects.filter(listing=listing).exclude(pk=bid.pk).update(is_winning=False)
+            Bid.objects.filter(listing=listing).exclude(pk=bid.pk).update(is_winning=False)
 
-        listing.current_highest_bid = bid_amount
-        listing.save(update_fields=["current_highest_bid", "updated_at"])
+            listing.current_highest_bid = bid_amount
+            listing.save(update_fields=["current_highest_bid", "updated_at"])
 
-        # Audit log is inside the atomic block — rolls back with the bid on failure
-        log_action(
-            user=user,
-            action="bid_placed",
-            resource_type="Bid",
-            resource_id=bid.id,
-            ip_address=ip_address,
-            user_agent=user_agent,
-            metadata={
-                "listing_id": str(listing.id),
-                "amount": str(bid.amount),
-                "user_role": user_role,
-            },
-        )
+            # Audit log is inside the atomic block — rolls back with the bid on failure
+            log_action(
+                user=user,
+                action="bid_placed",
+                resource_type="Bid",
+                resource_id=bid.id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                metadata={
+                    "listing_id": str(listing.id),
+                    "amount": str(bid.amount),
+                    "user_role": user_role,
+                },
+            )
+        except Exception:
+            # Re-raise so transaction.atomic() rolls back all writes above.
+            # The view's bare except handler logs full detail and returns HTTP 500.
+            raise
 
         return bid, listing
