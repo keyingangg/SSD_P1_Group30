@@ -123,6 +123,17 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # --------------------------------------------------------------------------
+# Supabase Storage (private bucket; files served only via signed URLs)
+# --------------------------------------------------------------------------
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+# The service_role key bypasses all Row Level Security and must never be used
+# in the application backend (NFSR-AZ-06). Storage access uses the anon key,
+# scoped to the auction-images bucket via RLS policies on storage.objects
+# (see core/sql/storage_rls_policies.sql).
+SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY")
+SUPABASE_STORAGE_BUCKET = os.environ.get("SUPABASE_STORAGE_BUCKET", "auction-images")
+
+# --------------------------------------------------------------------------
 # Database (Supabase PostgreSQL over TLS)
 # --------------------------------------------------------------------------
 # The backend must connect using a dedicated least-privilege role, not

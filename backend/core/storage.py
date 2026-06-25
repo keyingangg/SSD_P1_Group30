@@ -1,46 +1,59 @@
-"""Supabase Storage helpers for serving uploaded files securely."""
-import os
-import supabase
+"""Supabase Storage helpers for secure upload and serving of uploaded files."""
+import uuid
 
-# Initialize Supabase client from environment variables
-_supabase_url = os.environ.get("SUPABASE_URL")
-_supabase_key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+from django.conf import settings
+from supabase import create_client
 
-if _supabase_url and _supabase_key:
-    supabase_client = supabase.create_client(_supabase_url, _supabase_key)
-else:
-    supabase_client = None
+from core.validators import (
+    scan_for_malware,
+    validate_file_extension,
+    validate_file_size,
+    validate_mime_type,
+)
+
+_client = None
 
 
-def upload_to_supabase(file_obj, filename):
-    """Upload a file to Supabase Storage and return the public URL.
-    
-    Args:
-        file_obj: File-like object with read() method (Django UploadedFile)
-        filename: Target filename in bucket (e.g., "listings/abc123_photo.jpg")
-    
-    Returns:
-        Full public URL if successful, None if Supabase not configured
-    
-    Raises:
-        Exception: On upload failure
+def _get_client():
+    """Lazily build a Supabase client using the anon key.
+
+    The service_role key bypasses all Row Level Security and must never be
+    used in the application backend (NFSR-AZ-06). Writes/reads against the
+    auction-images bucket are instead authorised by RLS policies on
+    storage.objects scoped to that bucket for the anon role (see
+    core/sql/storage_rls_policies.sql).
     """
-    if not supabase_client:
-        raise RuntimeError("Supabase not configured. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env")
-    
-    # Read file content
-    file_content = file_obj.read()
-    
-    # Upload to 'listing-images' bucket
-    response = supabase_client.storage.from_("listing-images").upload(
-        path=filename,
-        file=file_content,
-        file_options={"content-type": file_obj.content_type}
+    global _client
+    if _client is None:
+        _client = create_client(settings.SUPABASE_URL, settings.SUPABASE_ANON_KEY)
+    return _client
+
+
+def upload_image(file_obj, filename, max_bytes=None):
+    """Validate and upload an image to the private bucket.
+
+    The client-supplied filename is used only to determine the validated
+    extension; the object is stored under a server-generated UUID v4 name so
+    client input never reaches the storage path (NFSR-C-07 / NFSR-C-02).
+    Returns the stored object key.
+    """
+    validate_file_size(file_obj, max_bytes=max_bytes)
+    detected_mime = validate_mime_type(file_obj)
+    ext = validate_file_extension(filename, detected_mime=detected_mime)
+    scan_for_malware(file_obj)
+
+    object_key = f"{uuid.uuid4()}{ext}"
+
+    file_obj.seek(0)
+    contents = file_obj.read()
+
+    _get_client().storage.from_(settings.SUPABASE_STORAGE_BUCKET).upload(
+        object_key,
+        contents,
+        {"content-type": detected_mime},
     )
-    
-    # Construct public URL
-    public_url = f"{_supabase_url}/storage/v1/object/public/listing-images/{filename}"
-    return public_url
+
+    return object_key
 
 
 def get_signed_url(file_path, expires_in=900):
@@ -49,11 +62,9 @@ def get_signed_url(file_path, expires_in=900):
     Files live in a private bucket outside the web root and must only be
     served via signed URLs (default 15-minute expiry).
     """
-    if not supabase_client:
-        return None
-    
-    # Generate signed URL (future enhancement for private buckets)
-    return supabase_client.storage.from_("listings").create_signed_url(
-        path=file_path,
-        expires_in=expires_in
+    response = (
+        _get_client()
+        .storage.from_(settings.SUPABASE_STORAGE_BUCKET)
+        .create_signed_url(file_path, expires_in)
     )
+    return response["signedURL"]

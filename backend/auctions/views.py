@@ -1,7 +1,6 @@
 """API views for the auctions app."""
 from datetime import timedelta
 from decimal import Decimal
-from uuid import uuid4
 
 from django.db import OperationalError
 from django.db.models import Count, OuterRef, Q, Subquery
@@ -13,7 +12,7 @@ from rest_framework.parsers import MultiPartParser
 
 from accounts.permissions import IsAdminUser, IsEmailVerified, IsEmailVerifiedSilent
 from core.audit import log_action
-from core.storage import upload_to_supabase
+from core.storage import upload_image
 from .bid_engine import submit_bid
 from .models import Bid, Listing
 from .serializers import (
@@ -437,30 +436,20 @@ class UserDashboardView(APIView):
 
 
 class ListingImageUploadView(APIView):
-    """Upload a listing image to Supabase (authenticated, admin only)."""
+    """Upload a listing image to a private Supabase Storage bucket (admin only)."""
 
     permission_classes = [IsAdminUser]
     staff_only = True
     parser_classes = [MultiPartParser]
 
     def post(self, request):
-
         f = request.FILES.get("file")
         if not f:
             return Response({"detail": "No file provided."}, status=400)
 
-        # Validate file size (5MB max) and content type
-        if f.size > 5 * 1024 * 1024:
-            return Response({"detail": "File too large (max 5MB)."}, status=400)
-        if not f.content_type.startswith("image/"):
-            return Response({"detail": "Invalid file type (must be image)."}, status=400)
-
-        try:
-            # Generate unique filename and upload to Supabase
-            filename = f"listings/{uuid4().hex}_{f.name}"
-            public_url = upload_to_supabase(f, filename)
-            
-            # Return full URL as both key and url for client storage
-            return Response({"key": public_url, "url": public_url}, status=201)
-        except Exception as e:
-            return Response({"detail": f"Upload failed: {str(e)}"}, status=500)
+        # upload_image validates size, real MIME type, and extension
+        # server-side, and stores the file under a server-generated UUID
+        # name (NFSR-IN-04 / NFSR-C-07 / NFSR-C-02). Any ValidationError it
+        # raises is converted to a 400 by core.exceptions.custom_exception_handler.
+        object_key = upload_image(f, f.name)
+        return Response({"key": object_key}, status=201)

@@ -111,7 +111,7 @@ export default function AdminCreate() {
           endTime: formatLocalDateTime(listing.ends_at),
           images: [],
           imageKey: listing.image_key || "",
-          imageUrl: listing.image_key || "",
+          imageUrl: listing.image_url || "",
         });
       } catch (error) {
         if (!cancelled) {
