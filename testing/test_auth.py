@@ -239,15 +239,15 @@ def test_staff_invite_admin_returns_201(admin_client):
 
 
 @pytest.mark.django_db
-def test_staff_invite_non_admin_returns_403(auth_client):
+def test_staff_invite_non_admin_returns_404(auth_client):
     resp = auth_client.post(STAFF_INVITE_URL, {"email": "newstaff@example.com"}, format="json")
-    assert resp.status_code == 403
+    assert resp.status_code == 404
 
 
 @pytest.mark.django_db
-def test_staff_invite_unauthenticated_returns_403(client):
+def test_staff_invite_unauthenticated_returns_404(client):
     resp = client.post(STAFF_INVITE_URL, {"email": "newstaff@example.com"}, format="json")
-    assert resp.status_code == 403
+    assert resp.status_code == 404
 
 
 @pytest.mark.django_db
@@ -295,9 +295,9 @@ def test_admin_user_list_returns_200_for_staff(admin_client):
 
 
 @pytest.mark.django_db
-def test_admin_user_list_returns_403_for_regular_user(auth_client):
+def test_admin_user_list_returns_404_for_regular_user(auth_client):
     resp = auth_client.get(ADMIN_USERS_URL)
-    assert resp.status_code == 403
+    assert resp.status_code == 404
 
 
 @pytest.mark.django_db
@@ -325,7 +325,7 @@ def test_admin_user_detail_delete_removes_user(admin_client, verified_user):
 
 
 @pytest.mark.django_db
-def test_admin_user_detail_returns_403_for_regular_user(auth_client, admin_user):
+def test_admin_user_detail_returns_404_for_regular_user(auth_client, admin_user):
     url = f"/api/accounts/admin/users/{admin_user.pk}/"
     resp = auth_client.patch(url)
-    assert resp.status_code == 403
+    assert resp.status_code == 404

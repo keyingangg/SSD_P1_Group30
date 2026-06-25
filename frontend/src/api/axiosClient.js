@@ -10,9 +10,6 @@ const axiosClient = axios.create({
   withCredentials: true,
   xsrfCookieName: "csrftoken",
   xsrfHeaderName: "X-CSRFToken",
-  headers: {
-    "Content-Type": "application/json",
-  },
 });
 
 export default axiosClient;

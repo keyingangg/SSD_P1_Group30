@@ -12,9 +12,11 @@ import ForgotPassword from "./pages/ForgotPassword.jsx";
 import ResetPassword from "./pages/ResetPassword.jsx";
 import AcceptInvite from "./pages/AcceptInvite.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
+import AccountSettings from "./pages/AccountSettings.jsx";
 import Checkout from "./pages/Checkout.jsx";
 import AdminOverview from "./pages/admin/AdminOverview.jsx";
 import AdminListings from "./pages/admin/AdminListings.jsx";
+import AdminCreate from "./pages/admin/AdminCreate.jsx";
 import AdminUsers from "./pages/admin/AdminUsers.jsx";
 import NotFound from "./pages/NotFound.jsx";
 
@@ -48,6 +50,14 @@ export default function App() {
           }
         />
         <Route
+          path="/account-settings"
+          element={
+            <ProtectedRoute>
+              <AccountSettings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/checkout/:orderId"
           element={
             <ProtectedRoute>
@@ -68,6 +78,14 @@ export default function App() {
           element={
             <ProtectedRoute requireAdmin>
               <AdminListings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/add-item"
+          element={
+            <ProtectedRoute requireAdmin>
+              <AdminCreate />
             </ProtectedRoute>
           }
         />

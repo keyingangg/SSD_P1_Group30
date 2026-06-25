@@ -39,6 +39,8 @@ INSTALLED_APPS = [
     "channels",
     "axes",
     "auditlog",
+    "django_otp",
+    "django_otp.plugins.otp_totp",
     # Local apps
     "accounts.apps.AccountsConfig",
     "auctions",
@@ -55,6 +57,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "core.middleware.RBACMiddleware",
     # core.middleware.SecurityHeadersMiddleware,  # TODO: enable custom security headers
     # django-axes must be the last authentication-related middleware.
     "axes.middleware.AxesMiddleware",
@@ -133,6 +136,10 @@ SUPABASE_STORAGE_BUCKET = os.environ.get("SUPABASE_STORAGE_BUCKET", "auction-ima
 # --------------------------------------------------------------------------
 # Database (Supabase PostgreSQL over TLS)
 # --------------------------------------------------------------------------
+# The backend must connect using a dedicated least-privilege role, not
+# Supabase's service_role key. Set DB_USER to the restricted role name
+# (for example, securebid_app) and never expose the service_role key in
+# the Django backend environment.
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
@@ -243,7 +250,7 @@ DEFAULT_FROM_EMAIL = os.environ.get(
 # Internationalization
 # --------------------------------------------------------------------------
 LANGUAGE_CODE = "en-us"
-TIME_ZONE = "UTC"
+TIME_ZONE = "Asia/Singapore"
 USE_I18N = True
 USE_TZ = True
 
@@ -254,3 +261,8 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# --------------------------------------------------------------------------
+# django-otp / TOTP (SFR-02b)
+# --------------------------------------------------------------------------
+OTP_TOTP_ISSUER = os.environ.get("SITE_NAME", "SecureBid")

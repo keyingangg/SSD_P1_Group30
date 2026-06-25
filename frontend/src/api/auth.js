@@ -82,3 +82,43 @@ export async function deleteAdminUser(userId) {
   const { data } = await axiosClient.delete(`/accounts/admin/users/${userId}/`);
   return data;
 }
+
+export async function getMFAStatus() {
+  const { data } = await axiosClient.get("/accounts/mfa/status/");
+  return data;
+}
+
+export async function startMFAEnrol() {
+  const { data } = await axiosClient.get("/accounts/mfa/enrol/");
+  return data;
+}
+
+export async function confirmMFAEnrol(otpCode) {
+  const { data } = await axiosClient.post("/accounts/mfa/enrol/confirm/", { otp_code: otpCode });
+  return data;
+}
+
+export async function unenrolMFA() {
+  const { data } = await axiosClient.post("/accounts/mfa/unenrol/");
+  return data;
+}
+
+export async function verifyMFALogin(otpCode) {
+  const { data } = await axiosClient.post("/accounts/mfa/verify-login/", { otp_code: otpCode });
+  return data;
+}
+
+export async function changePassword({ currentPassword, newPassword }) {
+  const { data } = await axiosClient.post("/accounts/password-change/", {
+    current_password: currentPassword,
+    new_password: newPassword,
+  });
+  return data;
+}
+
+export async function deleteAccount({ currentPassword, otpCode }) {
+  const payload = { current_password: currentPassword };
+  if (otpCode) payload.otp_code = otpCode;
+  const { data } = await axiosClient.post("/accounts/delete/", payload);
+  return data;
+}

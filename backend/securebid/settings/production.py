@@ -49,3 +49,8 @@ if _ssl:
 
 # Production email is delivered over TLS-secured SMTP (configured in base.py).
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+
+# Media files (uploads).
+# Keep this aligned with the Nginx /images/ alias in backend/nginx/securebid.conf.
+MEDIA_ROOT = BASE_DIR / "backend" / "images"
+MEDIA_URL = "/images/"

@@ -72,6 +72,20 @@ jobs:
       - name: Run Bandit
         run: bandit -r backend/ -ll
 
+  secrets-scan:
+    name: Secrets Scan (TruffleHog)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog scan
+        uses: trufflesecurity/trufflehog@v3.95.6
+        with:
+          extra_args: --only-verified
+
   dependency-check:
     name: Dependency Audit
     runs-on: ubuntu-latest

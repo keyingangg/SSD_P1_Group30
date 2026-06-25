@@ -105,14 +105,35 @@ hr.rule {
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.field input::placeholder {
+.field input::placeholder,
+.field textarea::placeholder {
   color: var(--muted);
 }
 
-.field input:focus {
+.field input:focus,
+.field textarea:focus,
+.field select:focus {
   outline: none;
   border-color: var(--gold);
   box-shadow: 0 0 0 3px rgba(194, 161, 90, 0.18);
+}
+
+.field textarea,
+.field select {
+  width: 100%;
+  padding: 13px 14px;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  color: var(--ink);
+  background: var(--input-bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.field textarea {
+  min-height: 130px;
+  resize: vertical;
 }
 
 /* --- Buttons ----------------------------------------------------------- */

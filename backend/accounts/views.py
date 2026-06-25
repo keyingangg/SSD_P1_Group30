@@ -1,27 +1,31 @@
-"""API views for the accounts app.
-
-Implements registration with email verification and session-based login.
-MFA/OTP is intentionally out of scope here and will be added separately.
-"""
+"""API views for the accounts app."""
+import base64
+import io
 import logging
 import smtplib
 import time
 
-
+import qrcode
+from auditlog.models import LogEntry
 from axes.utils import reset
 from django.contrib.auth import authenticate
 from django.contrib.auth import get_user_model
 from django.contrib.auth import login as django_login
 from django.contrib.auth import logout as django_logout
+from django.contrib.auth.signals import user_login_failed
+from django.contrib.contenttypes.models import ContentType
 from django.contrib.sessions.models import Session
 from django.core.exceptions import PermissionDenied
 from django.core.mail import BadHeaderError
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
+from django_otp.plugins.otp_totp.models import TOTPDevice
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from accounts.permissions import IsAdminUser, IsEmailVerified
 
 logger = logging.getLogger("securebid")
 
@@ -31,6 +35,7 @@ from .emails import (
     send_password_reset_email,
     send_verification_email,
 )
+from .password import is_password_breached
 
 from .models import (
     AccountLockoutProfile,
@@ -58,6 +63,20 @@ from .tokens import (
 )
 
 User = get_user_model()
+
+
+def _log_mfa_event(user, action_name, request):
+    """Write an audit log entry for MFA enrolment/disablement (NFSR-AC-02)."""
+    LogEntry.objects.create(
+        content_type=ContentType.objects.get_for_model(user),
+        object_pk=str(user.pk),
+        object_repr=str(user),
+        action=LogEntry.Action.UPDATE,
+        changes={action_name: [None, True]},
+        actor=user,
+        remote_addr=get_client_ip(request),
+    )
+
 
 # Uniform response used for every registration outcome to prevent account
 # enumeration (SFR-01d / AR-01).
@@ -253,11 +272,16 @@ class LoginView(APIView):
             normalise_auth_response_timing(start_time)
             return Response(AUTH_FAILURE_RESPONSE, status=400)
 
-        # Rotate the current session key before login to prevent session
-        # logging in on one device should not sign them out elsewhere.
-        # Sessions are only force-invalidated across all devices on password
-        # change/reset (see PasswordChangeView / PasswordResetConfirmView).
         request.session.cycle_key()
+
+        # If user has MFA enrolled, park credentials in the session and ask
+        # the frontend to collect the TOTP code before granting a session (SFR-02b).
+        has_mfa = TOTPDevice.objects.filter(user=user, confirmed=True).exists()
+        if has_mfa:
+            request.session["_mfa_pending_user_id"] = str(user.pk)
+            request.session["_mfa_pending_backend"] = user.backend
+            normalise_auth_response_timing(start_time)
+            return Response({"mfa_required": True}, status=200)
 
         django_login(request, user)
 
@@ -281,7 +305,7 @@ class LogoutView(APIView):
 class UserProfileView(APIView):
     """Read (and later update) the authenticated user's own profile."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsEmailVerified]
 
     def get(self, request):
         return Response(UserProfileSerializer(request.user).data, status=200)
@@ -378,11 +402,11 @@ class PasswordResetConfirmView(APIView):
 class PasswordChangeView(APIView):
     """Allow an authenticated user to change their password."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsEmailVerified]
 
     def post(self, request):
-        current_password = request.data.get("current_password")
-        new_password = request.data.get("new_password")
+        current_password = request.data.get("current_password", "")
+        new_password = request.data.get("new_password", "")
 
         if not current_password or not new_password:
             return Response(
@@ -391,15 +415,34 @@ class PasswordChangeView(APIView):
             )
 
         if not request.user.check_password(current_password):
+            user_login_failed.send(
+                sender=request.user.__class__,
+                credentials={"username": request.user.email},
+                request=request,
+            )
+            return Response({"detail": "Current password is incorrect."}, status=400)
+
+        if len(new_password) < 12 or len(new_password) > 128:
             return Response(
-                {"detail": "Current password is incorrect."},
+                {"detail": "New password must be between 12 and 128 characters."},
+                status=400,
+            )
+
+        if is_password_breached(new_password):
+            return Response(
+                {
+                    "detail": "This password has appeared in a known data breach. "
+                    "Please choose a different one."
+                },
                 status=400,
             )
 
         request.user.set_password(new_password)
         request.user.save(update_fields=["password"])
 
-        # Invalidate all active sessions across all devices.
+        # Flush current session properly so Django's session middleware does not
+        # error trying to save a deleted session row, then clear all other devices.
+        request.session.flush()
         invalidate_all_user_sessions(request.user)
 
         return Response(
@@ -416,11 +459,10 @@ class StaffInviteView(APIView):
     password when they accept the link.
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
+    staff_only = True
 
     def post(self, request):
-        if not request.user.is_staff:
-            return Response({"detail": "Admin access required."}, status=403)
 
         serializer = StaffInviteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -432,6 +474,7 @@ class StaffInviteView(APIView):
                 status=400,
             )
 
+        user = None
         try:
             user = User.objects.create_user(
                 email=email,
@@ -443,9 +486,23 @@ class StaffInviteView(APIView):
             )
             raw_token = generate_staff_invite_token(user, invited_by=request.user)
             send_invite_email(user, raw_token, invited_by=request.user)
+
+            LogEntry.objects.log_create(
+                instance=user,
+                action=LogEntry.Action.CREATE,
+                changes={
+                    "event": "STAFF_INVITE",
+                    "invited_by": request.user.email,
+                    "invited_by_id": str(request.user.id),
+                    "staff_user_email": user.email,
+                    "staff_user_id": str(user.id),
+                },
+                actor=request.user,
+            )
         except (BadHeaderError, smtplib.SMTPException, OSError) as exc:
             logger.error("Failed to send staff invite to %s: %s", email, exc)
-            user.delete()
+            if user is not None:
+                user.delete()
             return Response(
                 {"detail": "Could not send the invitation email. Please try again."},
                 status=503,
@@ -503,24 +560,64 @@ class AcceptInviteView(APIView):
 
 
 class DeleteAccountView(APIView):
-    """Request permanent deletion / anonymisation of the account."""
+    """Permanently delete the authenticated user's account (SFR-05a).
+
+    If MFA is enrolled, a valid TOTP code must be supplied in the request body.
+    """
 
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        # TODO: re-confirm identity, block if unpaid wins, anonymise PII.
-        return Response({"detail": "Not implemented."}, status=501)
+        user = request.user
+
+        # Step 1: require current password re-entry (SFR-05a).
+        current_password = request.data.get("current_password", "")
+        if not current_password:
+            return Response(
+                {"detail": "Your current password is required to delete your account."},
+                status=400,
+            )
+        if not user.check_password(current_password):
+            user_login_failed.send(
+                sender=user.__class__,
+                credentials={"username": user.email},
+                request=request,
+            )
+            return Response({"detail": "Invalid password."}, status=400)
+
+        # Step 2: if MFA is enrolled, also require a valid TOTP code (SFR-05a).
+        device = TOTPDevice.objects.filter(user=user, confirmed=True).first()
+        if device:
+            otp_code = request.data.get("otp_code", "").replace(" ", "")
+            if not otp_code:
+                return Response(
+                    {"detail": "MFA verification required.", "mfa_required": True},
+                    status=403,
+                )
+            if not device.verify_token(otp_code):
+                user_login_failed.send(
+                    sender=user.__class__,
+                    credentials={"username": user.email},
+                    request=request,
+                )
+                return Response({"detail": "Invalid MFA code."}, status=400)
+
+        email = user.email
+        # Flush the current session properly so Django's session middleware
+        # does not try to save a session that no longer exists after deletion.
+        request.session.flush()
+        user.delete()
+        logger.info("User %s deleted their own account", email)
+        return Response({"detail": "Your account has been deleted."}, status=200)
 
 
 class AdminUserListView(APIView):
     """Return all user accounts for the admin panel (staff only)."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
+    staff_only = True
 
     def get(self, request):
-        if not request.user.is_staff:
-            return Response({"detail": "Admin access required."}, status=403)
-
         qs = User.objects.all().order_by("-created_at")
         serializer = AdminUserListSerializer(qs, many=True)
         return Response(serializer.data)
@@ -534,7 +631,8 @@ class AdminUserDetailView(APIView):
     - Cannot act on a superuser account (superusers are managed via Django shell).
     """
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminUser]
+    staff_only = True
 
     def _get_target(self, request, user_id):
         """Return (user, error_response) — one of the two will be None."""
@@ -578,3 +676,157 @@ class AdminUserDetailView(APIView):
         target.delete()
         logger.info("Admin %s deleted account %s", request.user.email, email)
         return Response({"detail": "Account deleted."}, status=200)
+
+
+# ---------------------------------------------------------------------------
+# MFA (TOTP) views — SFR-02b / NFSR-AU-01 / NFSR-AU-04 / NFSR-AC-02
+# ---------------------------------------------------------------------------
+
+class MFAStatusView(APIView):
+    """Return whether the authenticated user has MFA enrolled."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        enrolled = TOTPDevice.objects.filter(
+            user=request.user, confirmed=True
+        ).exists()
+        return Response({"enrolled": enrolled})
+
+
+class MFAEnrolView(APIView):
+    """Begin MFA enrolment: generate a TOTP secret and return a QR code.
+
+    The secret is generated by django-otp using os.urandom (CSPRNG) and stored
+    in otp_totp_totpdevice, protected at rest by Supabase AES-256 (NFSR-AU-01).
+    The device is left unconfirmed until the user verifies their first code.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # Drop any previous unconfirmed device so enrolment is idempotent.
+        TOTPDevice.objects.filter(user=request.user, confirmed=False).delete()
+
+        device = TOTPDevice.objects.create(
+            user=request.user,
+            name=request.user.email,
+            confirmed=False,
+        )
+
+        qr = qrcode.QRCode()
+        qr.add_data(device.config_url)
+        qr.make(fit=True)
+        img = qr.make_image()
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        qr_b64 = base64.b64encode(buf.getvalue()).decode()
+
+        return Response({"qr_code": qr_b64})
+
+
+class MFAEnrolConfirmView(APIView):
+    """Complete MFA enrolment by verifying the user's first TOTP code."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        otp_code = request.data.get("otp_code", "").replace(" ", "")
+
+        device = TOTPDevice.objects.filter(
+            user=request.user, confirmed=False
+        ).first()
+
+        if device is None:
+            return Response(
+                {"detail": "No pending MFA setup found. Please start again."},
+                status=400,
+            )
+
+        if not device.verify_token(otp_code):
+            user_login_failed.send(
+                sender=request.user.__class__,
+                credentials={"username": request.user.email},
+                request=request,
+            )
+            return Response({"detail": "Invalid code. Please try again."}, status=400)
+
+        device.confirmed = True
+        device.save(update_fields=["confirmed"])
+
+        _log_mfa_event(request.user, "mfa_enrolled", request)
+        logger.info("MFA enrolled for user %s", request.user.email)
+
+        return Response({"detail": "MFA enabled successfully."}, status=200)
+
+
+class MFAUnenrolView(APIView):
+    """Disable MFA by removing the user's TOTP device."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        deleted, _ = TOTPDevice.objects.filter(user=request.user).delete()
+
+        if not deleted:
+            return Response(
+                {"detail": "MFA is not enabled on this account."}, status=400
+            )
+
+        _log_mfa_event(request.user, "mfa_disabled", request)
+        logger.info("MFA disabled for user %s", request.user.email)
+
+        return Response({"detail": "MFA disabled successfully."}, status=200)
+
+
+class MFALoginVerifyView(APIView):
+    """Complete a pending MFA login by verifying the TOTP code.
+
+    The user's identity was already confirmed by password in LoginView.
+    Only the session token grants access — the session is not fully
+    authenticated until this step succeeds.
+
+    Invalid codes are counted toward the django-axes lockout threshold
+    (NFSR-AU-04). The TOTPDevice.last_t column prevents token replay within
+    the same 30-second window (SFR-02b).
+    """
+
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        user_id = request.session.get("_mfa_pending_user_id")
+        backend = request.session.get("_mfa_pending_backend")
+
+        if not user_id:
+            return Response(
+                {"detail": "No pending MFA verification. Please log in again."},
+                status=400,
+            )
+
+        try:
+            user = User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            return Response(
+                {"detail": "Session expired. Please log in again."}, status=400
+            )
+
+        otp_code = request.data.get("otp_code", "").replace(" ", "")
+        device = TOTPDevice.objects.filter(user=user, confirmed=True).first()
+
+        if device is None or not device.verify_token(otp_code):
+            user_login_failed.send(
+                sender=user.__class__,
+                credentials={"username": user.email},
+                request=request,
+            )
+            return Response({"detail": "Invalid code. Please try again."}, status=400)
+
+        # Clear pending markers before elevating to a full session.
+        del request.session["_mfa_pending_user_id"]
+        del request.session["_mfa_pending_backend"]
+
+        user.backend = backend
+        django_login(request, user)
+        notify_new_device_or_location(request, user)
+
+        return Response(UserProfileSerializer(user).data, status=200)
