@@ -32,7 +32,6 @@ export default function Navbar() {
   if (HIDDEN_ON.includes(pathname)) return null;
 
   const isAdmin = user?.is_staff === true;
-  const isAdminRoute = pathname.startsWith("/admin");
 
   const handleLogout = async () => {
     setDropdownOpen(false);
@@ -44,18 +43,18 @@ export default function Navbar() {
   const closeDropdown = () => { setDropdownOpen(false); setConfirmingLogout(false); };
 
   return (
-    <nav className={`nav-bar${isAdminRoute ? " nav-bar--admin" : ""}`}>
+    <nav className={`nav-bar${isAdmin ? " nav-bar--admin" : ""}`}>
       <Link to={isAdmin ? "/admin/overview" : "/auctions"}><Logo /></Link>
 
       <div className="nav-links">
-        {isAdminRoute ? (
+        {isAdmin ? (
           <>
             {ADMIN_NAV.map(({ label, to }) => (
               <Link key={to} to={to} className={`nav-link${pathname === to ? " active" : ""}`}>
                 {label}
               </Link>
             ))}
-            <Link to="/auctions" className="nav-link">
+            <Link to="/auctions" className={`nav-link${pathname === "/auctions" ? " active" : ""}`}>
               Auctions
             </Link>
           </>
@@ -64,16 +63,9 @@ export default function Navbar() {
             <Link to="/auctions" className={`nav-link${pathname === "/auctions" ? " active" : ""}`}>
               Auctions
             </Link>
-            {!isAdmin && (
-              <Link to="/dashboard" className={`nav-link${pathname === "/dashboard" ? " active" : ""}`}>
-                Dashboard
-              </Link>
-            )}
-            {isAdmin && (
-              <Link to="/admin/overview" className="nav-link">
-                Admin
-              </Link>
-            )}
+            <Link to="/dashboard" className={`nav-link${pathname === "/dashboard" ? " active" : ""}`}>
+              Dashboard
+            </Link>
           </>
         )}
       </div>
