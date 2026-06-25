@@ -37,7 +37,7 @@ export default function BidFeed({ listingId, bids: bidsProp, isClosed = false, u
         </p>
       ) : (
         <div className="ld-bid-rows">
-          {bids.map((bid, i) => {
+          {bids.slice(0, 5).map((bid, i) => {
             const isWinner = isClosed && i === 0;
             const isHighest = !isClosed && i === 0;
             const isTop = isWinner || isHighest;

@@ -37,6 +37,7 @@ export default function ListingDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [rejectedMinBid, setRejectedMinBid] = useState(null);
+  const [conflictMinBid, setConflictMinBid] = useState(null);
   const storageKey = `bid_placed_${id}`;
   const [lastPlacedBid, setLastPlacedBid] = useState(() => {
     const saved = localStorage.getItem(storageKey);
@@ -169,6 +170,23 @@ export default function ListingDetail() {
                   <div className="ld-bid-placed-row">
                     <span>Current leading bid:</span>
                     <span className="ld-bid-placed-row-amount">{formatSGD(lastPlacedBid)}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Bid conflict banner (HTTP 409 — race condition) */}
+              {conflictMinBid && (
+                <div className="ld-bid-conflict-banner">
+                  <div className="ld-bid-conflict-icon">!</div>
+                  <div className="ld-bid-conflict-tag">BID CONFLICT</div>
+                  <div className="ld-bid-conflict-title">Your Bid Was Not Placed</div>
+                  <div className="ld-bid-conflict-desc">
+                    Another bid was server-recorded at the same time. The price has been updated — please review and try again.
+                  </div>
+                  <div className="ld-bid-conflict-divider" />
+                  <div className="ld-bid-conflict-min">
+                    <span>Minimum valid bid:</span>
+                    <span className="ld-bid-conflict-min-amount">{formatSGD(conflictMinBid)}</span>
                   </div>
                 </div>
               )}
@@ -347,8 +365,9 @@ export default function ListingDetail() {
                           <BidForm
                             listingId={id}
                             listing={listing}
-                            onBidPlaced={(amt) => { setRejectedMinBid(null); handleBidPlaced(amt); }}
-                            onBidRejected={(minBid) => { setRejectedMinBid(minBid); }}
+                            onBidPlaced={(amt) => { setRejectedMinBid(null); setConflictMinBid(null); handleBidPlaced(amt); }}
+                            onBidRejected={(minBid) => { setConflictMinBid(null); setRejectedMinBid(minBid); }}
+                            onBidConflict={(minBid) => { setRejectedMinBid(null); setConflictMinBid(minBid); refreshListing(); }}
                           />
                         </div>
 

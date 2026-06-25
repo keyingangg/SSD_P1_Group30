@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { submitBid } from "../api/auctions.js";
 
-export default function BidForm({ listingId, listing, onBidPlaced, onBidRejected }) {
+export default function BidForm({ listingId, listing, onBidPlaced, onBidRejected, onBidConflict }) {
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -73,7 +73,13 @@ export default function BidForm({ listingId, listing, onBidPlaced, onBidRejected
       setAmount(minimumAllowedBid > 0 ? minimumAllowedBid.toFixed(2) : "");
       if (typeof onBidPlaced === "function") onBidPlaced(placed);
     } catch (err) {
+      const status = err?.response?.status;
       const detail = err?.response?.data?.detail || "Unable to submit bid.";
+      if (status === 409) {
+        // Race condition — another bid won the lock; notify parent to show conflict banner
+        if (typeof onBidConflict === "function") onBidConflict(minimumAllowedBid);
+        return;
+      }
       const isTooLow = /minimum|increment|at least|too low/i.test(detail);
       if (isTooLow && typeof onBidRejected === "function") {
         onBidRejected(minimumAllowedBid);

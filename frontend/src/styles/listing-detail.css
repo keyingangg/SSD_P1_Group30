@@ -814,6 +814,65 @@
   color: #9a7a2a;
 }
 
+/* Bid conflict banner (HTTP 409 — race condition) */
+.ld-bid-conflict-banner {
+  margin-bottom: 14px;
+  padding: 28px 24px 20px;
+  background: #faf7f0;
+  border: 1px solid #d9cba8;
+  border-radius: 0;
+  text-align: center;
+}
+.ld-bid-conflict-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid #c8a84b;
+  color: #9a7a2a;
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+.ld-bid-conflict-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #9a7a2a;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+.ld-bid-conflict-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-bottom: 8px;
+  font-family: Georgia, serif;
+}
+.ld-bid-conflict-desc {
+  font-size: 13px;
+  color: #5a5040;
+  line-height: 1.55;
+  margin-bottom: 16px;
+}
+.ld-bid-conflict-divider {
+  border-top: 1px solid #d9cba8;
+  margin-bottom: 14px;
+}
+.ld-bid-conflict-min {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: #6b6045;
+}
+.ld-bid-conflict-min-amount {
+  font-size: 16px;
+  font-weight: 700;
+  color: #9a7a2a;
+}
+
 /* Bid history */
 .ld-history-header {
   display: flex;

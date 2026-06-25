@@ -3,6 +3,7 @@ from datetime import timedelta
 from decimal import Decimal
 from uuid import uuid4
 
+from django.db import OperationalError
 from django.db.models import Count, OuterRef, Q, Subquery
 from django.utils import timezone
 from rest_framework.permissions import AllowAny
@@ -171,6 +172,28 @@ class BidSubmitView(APIView):
                 listing_id=listing_id,
                 user=request.user,
                 amount=amount_raw,
+                ip_address=ip,
+                user_agent=ua,
+            )
+        except OperationalError:
+            # Row-level lock could not be acquired — concurrent bid in progress
+            log_action(
+                user=request.user,
+                action="bid_rejected",
+                resource_type="Listing",
+                resource_id=listing_id,
+                ip_address=ip,
+                user_agent=ua,
+                metadata={
+                    "listing_id": str(listing_id),
+                    "attempted_amount": str(amount_raw),
+                    "reason": "lock_contention",
+                    "user_role": "staff" if getattr(request.user, "is_staff", False) else "user",
+                },
+            )
+            return Response(
+                {"detail": "Another bid is being processed. Please try again."},
+                status=409,
             )
         except LookupError:
             log_action(
@@ -204,20 +227,7 @@ class BidSubmitView(APIView):
                 },
             )
             return Response({"detail": str(exc)}, status=400)
-
-        log_action(
-            user=request.user,
-            action="bid_placed",
-            resource_type="Bid",
-            resource_id=bid.id,
-            ip_address=ip,
-            user_agent=ua,
-            metadata={
-                "listing_id": str(listing.id),
-                "amount": str(bid.amount),
-                "user_role": "staff" if getattr(request.user, "is_staff", False) else "user",
-            },
-        )
+        # bid_placed audit log is written inside the atomic block in submit_bid
 
         return Response(
             {
