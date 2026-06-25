@@ -82,6 +82,9 @@ def submit_bid(listing_id, user, amount, ip_address=None, user_agent=""):
         if runtime_status != "active":
             raise ValueError("Bidding is only allowed on active auctions.")
 
+        if Bid.objects.filter(listing=listing, bidder=user, is_winning=True).exists():
+            raise ValueError("You cannot place consecutive bids — you are already the highest bidder.")
+
         current_highest = listing.current_highest_bid or listing.starting_price
         minimum_allowed = current_highest + listing.minimum_increment
         if bid_amount < minimum_allowed:

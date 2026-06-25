@@ -389,7 +389,7 @@ class BidSubmitView(BidImmutableMixin, APIView):
                     "security_event": True,
                 },
             )
-            return Response({"detail": str(exc)}, status=403)
+            return Response({"detail": str(exc)}, status=400)
         except ValueError as exc:
             log_action(
                 user=request.user,
