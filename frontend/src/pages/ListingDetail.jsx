@@ -159,7 +159,7 @@ export default function ListingDetail() {
             {/* Right panel */}
             <div className="ld-right">
               {/* Bid placed banner */}
-              {lastPlacedBid && !rejectedMinBid && (
+              {lastPlacedBid && !rejectedMinBid && !isAdmin && (
                 <div className="ld-bid-placed-banner">
                   <div className="ld-bid-placed-icon">✓</div>
                   <div className="ld-bid-placed-tag">BID PLACED</div>

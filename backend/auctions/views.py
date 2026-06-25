@@ -28,6 +28,46 @@ from .serializers import (
     ListingSerializer,
 )
 
+_audit_logger = logging.getLogger(__name__)
+
+
+class BidImmutableMixin:
+    """Reject and log any DELETE or PATCH attempt on bid endpoints (NFSR-IN-05)."""
+
+    def _reject_bid_mutation(self, request, method, **kwargs):
+        user = request.user
+        resource_id = kwargs.get("listing_id", "unknown")
+        _audit_logger.warning(
+            "Illegal bid mutation attempt: method=%s user=%s path=%s",
+            method,
+            getattr(user, "id", "anonymous"),
+            request.path,
+        )
+        log_action(
+            user=user if getattr(user, "is_authenticated", False) else None,
+            action="bid_mutation_rejected",
+            resource_type="Bid",
+            resource_id=resource_id,
+            ip_address=request.META.get("REMOTE_ADDR"),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            metadata={
+                "method": method,
+                "path": request.path,
+                "user_role": "staff" if getattr(user, "is_staff", False) else "user",
+                "security_event": True,
+            },
+        )
+        return Response(
+            {"detail": "Bid records are immutable and cannot be modified or deleted."},
+            status=405,
+        )
+
+    def delete(self, request, **kwargs):
+        return self._reject_bid_mutation(request, "DELETE", **kwargs)
+
+    def patch(self, request, **kwargs):
+        return self._reject_bid_mutation(request, "PATCH", **kwargs)
+
 logger = logging.getLogger("securebid")
 
 
@@ -269,7 +309,7 @@ class ListingCancelView(APIView):
     ratelimit(key="user_or_ip", rate="30/m", method="POST", block=True),
     name="post",
 )
-class BidSubmitView(APIView):
+class BidSubmitView(BidImmutableMixin, APIView):
     """Submit a bid on an active auction (authenticated + verified)."""
 
     permission_classes = [IsEmailVerified]
@@ -401,7 +441,7 @@ class BidSubmitView(APIView):
         )
 
 
-class ListingBidsView(APIView):
+class ListingBidsView(BidImmutableMixin, APIView):
     """Return all bids for a listing, newest first. Public read."""
 
     permission_classes = [AllowAny]
@@ -415,7 +455,7 @@ class ListingBidsView(APIView):
         return Response(list(bids))
 
 
-class UserBidHistoryView(APIView):
+class UserBidHistoryView(BidImmutableMixin, APIView):
     """List the authenticated user's own bid history."""
 
     permission_classes = [IsEmailVerifiedSilent]

@@ -1,13 +1,40 @@
 """Core bidding engine: validation, locking, and atomic commit."""
 
+import logging
 from decimal import Decimal, InvalidOperation
 
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from django.core.exceptions import PermissionDenied
 from django.db import OperationalError, transaction
 from django.utils import timezone
 
 from core.audit import log_action
 from .models import Bid, Listing
+
+logger = logging.getLogger("securebid")
+
+
+def _broadcast_bid(listing_id: str, amount: str, anonymous_identifier: str) -> None:
+    """Push an anonymised bid-update message to all WebSocket viewers of a listing."""
+    channel_layer = get_channel_layer()
+    if channel_layer is None:
+        logger.warning("No channel layer configured — skipping bid broadcast for listing %s", listing_id)
+        return
+    group = f"auction_{listing_id}"
+    async_to_sync(channel_layer.group_send)(
+        group,
+        {
+            "type": "bid_update",
+            "data": {
+                "type": "bid_update",
+                "listing_id": listing_id,
+                "current_highest_bid": amount,
+                "anonymous_identifier": anonymous_identifier,
+                # bidder_id intentionally omitted (NFSR-C-04 · SFR-11f)
+            },
+        },
+    )
 
 
 def submit_bid(listing_id, user, amount, ip_address=None, user_agent=""):
@@ -95,4 +122,11 @@ def submit_bid(listing_id, user, amount, ip_address=None, user_agent=""):
             # The view's bare except handler logs full detail and returns HTTP 500.
             raise
 
-        return bid, listing
+    # Broadcast outside the atomic block so clients only see committed state (NFR-02)
+    _broadcast_bid(
+        listing_id=str(listing_id),
+        amount=str(bid_amount),
+        anonymous_identifier=anonymous_identifier,
+    )
+
+    return bid, listing
