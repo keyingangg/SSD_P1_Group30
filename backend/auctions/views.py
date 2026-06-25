@@ -1,10 +1,13 @@
 """API views for the auctions app."""
+import logging
 from datetime import timedelta
 from decimal import Decimal
 
 from django.db import OperationalError
 from django.db.models import Count, OuterRef, Q, Subquery
 from django.utils import timezone
+from django.utils.decorators import method_decorator
+from django_ratelimit.decorators import ratelimit
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -14,6 +17,7 @@ from accounts.permissions import IsAdminUser, IsEmailVerified, IsEmailVerifiedSi
 from core.audit import log_action
 from core.storage import upload_image
 from .bid_engine import submit_bid
+from .emails import send_auction_cancelled_email
 from .models import Bid, Listing
 from .serializers import (
     BidSerializer,
@@ -23,7 +27,13 @@ from .serializers import (
     ListingSerializer,
 )
 
+logger = logging.getLogger("securebid")
 
+
+@method_decorator(
+    ratelimit(key="ip", rate="60/m", method="GET", block=True),
+    name="get",
+)
 class ListingListView(APIView):
     """Browse, search, and filter published listings (public)."""
 
@@ -98,7 +108,11 @@ class ListingCreateView(APIView):
 
 
 class ListingUpdateView(APIView):
-    """Update an existing listing (admin only)."""
+    """Update an existing listing (admin only).
+
+    Modification is blocked once any bid has been placed — the auction must be
+    cancelled first (SFR-06c).
+    """
 
     permission_classes = [IsAdminUser]
     staff_only = True
@@ -109,6 +123,19 @@ class ListingUpdateView(APIView):
             listing = Listing.objects.get(pk=listing_id)
         except Listing.DoesNotExist:
             return Response({"detail": "Listing not found."}, status=404)
+
+        # SFR-06c: prevent modification of a listing that has received bids
+        # unless the auction has already been cancelled.
+        if listing.bids.exists() and listing.status != "cancelled":
+            return Response(
+                {
+                    "detail": (
+                        "This listing cannot be modified because bids have already been placed. "
+                        "Cancel the auction first, then make changes."
+                    )
+                },
+                status=409,
+            )
 
         serializer = ListingCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -137,7 +164,11 @@ class ListingUpdateView(APIView):
 
 
 class ListingDeleteView(APIView):
-    """Delete a listing (admin only)."""
+    """Delete a listing (admin only).
+
+    Deletion is blocked once any bid has been placed — the auction must be
+    cancelled first (SFR-06c).
+    """
 
     permission_classes = [IsAdminUser]
     staff_only = True
@@ -149,10 +180,94 @@ class ListingDeleteView(APIView):
         except Listing.DoesNotExist:
             return Response({"detail": "Listing not found."}, status=404)
 
+        # SFR-06c: prevent deletion of a listing that has received bids
+        # unless the auction has already been cancelled.
+        if listing.bids.exists() and listing.status != "cancelled":
+            return Response(
+                {
+                    "detail": (
+                        "This listing cannot be deleted because bids have already been placed. "
+                        "Cancel the auction first, then delete it."
+                    )
+                },
+                status=409,
+            )
+
         listing.delete()
         return Response(status=204)
 
 
+class ListingCancelView(APIView):
+    """Cancel an auction and notify all bidders (SFR-06c).
+
+    Once cancelled the listing is locked: bidding stops and the admin may
+    then modify or delete it.  Every unique bidder is emailed so they know
+    their bids are void.
+    """
+
+    permission_classes = [IsAdminUser]
+    staff_only = True
+
+    def post(self, request, listing_id):
+        try:
+            listing = Listing.objects.get(pk=listing_id)
+        except Listing.DoesNotExist:
+            return Response({"detail": "Listing not found."}, status=404)
+
+        if listing.status == "cancelled":
+            return Response({"detail": "Listing is already cancelled."}, status=400)
+
+        # Collect unique bidder emails before status change.
+        bidder_emails = list(
+            Bid.objects.filter(listing=listing)
+            .select_related("bidder")
+            .values_list("bidder__email", flat=True)
+            .distinct()
+        )
+
+        listing.status = "cancelled"
+        listing.save(update_fields=["status", "updated_at"])
+
+        # Notify every bidder whose bids are now void.
+        notified = 0
+        for email in bidder_emails:
+            try:
+                send_auction_cancelled_email(email, listing)
+                notified += 1
+            except Exception:
+                logger.error(
+                    "Failed to send auction-cancellation email to %s for listing %s",
+                    email,
+                    listing_id,
+                )
+
+        log_action(
+            user=request.user,
+            action="listing_cancelled",
+            resource_type="Listing",
+            resource_id=listing.id,
+            ip_address=request.META.get("REMOTE_ADDR"),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            metadata={
+                "listing_title": listing.title,
+                "bidders_notified": notified,
+                "total_bidders": len(bidder_emails),
+            },
+        )
+
+        return Response(
+            {
+                "detail": "Auction cancelled.",
+                "bidders_notified": notified,
+            },
+            status=200,
+        )
+
+
+@method_decorator(
+    ratelimit(key="user_or_ip", rate="30/m", method="POST", block=True),
+    name="post",
+)
 class BidSubmitView(APIView):
     """Submit a bid on an active auction (authenticated + verified)."""
 

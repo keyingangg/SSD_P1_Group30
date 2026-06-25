@@ -167,6 +167,12 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "core.pagination.StandardResultsPagination",
     "PAGE_SIZE": 20,
     "EXCEPTION_HANDLER": "core.exceptions.custom_exception_handler",
+    # Only accept application/json by default — other Content-Types get HTTP 415
+    # (NFSR-IN-03). Views that need multipart (image upload) override this with
+    # parser_classes = [MultiPartParser] directly on the view class.
+    "DEFAULT_PARSER_CLASSES": [
+        "rest_framework.parsers.JSONParser",
+    ],
 }
 
 # --------------------------------------------------------------------------

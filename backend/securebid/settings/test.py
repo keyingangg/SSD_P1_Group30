@@ -28,6 +28,10 @@ EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 # Disable brute-force protection so login tests don't interfere with each other.
 AXES_ENABLED = False
 
+# Disable rate limiting so endpoint tests don't get blocked by the 10/min
+# login cap or 30/min bid cap (django-ratelimit honours this flag globally).
+RATELIMIT_ENABLE = False
+
 # Use a fast hasher so tests don't spend time on Argon2 stretching.
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 

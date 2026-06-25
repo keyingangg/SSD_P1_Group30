@@ -1,5 +1,7 @@
 """Serializers for the auctions app."""
+import html
 import logging
+from decimal import Decimal
 
 from rest_framework import serializers
 
@@ -7,6 +9,9 @@ from core.storage import get_signed_url
 from .models import Bid, Listing
 
 logger = logging.getLogger("securebid")
+
+# Allowlist of valid category values (NFSR-IN-03).
+_VALID_CATEGORIES = [choice[0] for choice in Listing.CATEGORY_CHOICES]
 
 
 def _image_signed_url(image_key):
@@ -24,6 +29,19 @@ def _image_signed_url(image_key):
         return None
 
 
+def _encode_text(value):
+    """HTML-encode a string to neutralise stored XSS (SFR-06a / AR-08).
+
+    Applied to all admin-submitted free-text fields before they leave the
+    API boundary.  html.escape converts < > & " ' to their named entities so
+    that even if the client renders the value in an unsafe HTML context the
+    payload cannot execute.
+    """
+    if not isinstance(value, str):
+        return value
+    return html.escape(value, quote=True)
+
+
 class ListingSerializer(serializers.ModelSerializer):
     """Serialize a listing for public/detail views (no bidder identities).
 
@@ -37,14 +55,12 @@ class ListingSerializer(serializers.ModelSerializer):
     def get_image_url(self, obj):
         return _image_signed_url(obj.image_key)
 
-    status = serializers.SerializerMethodField()
-    display_status = serializers.SerializerMethodField()
-
-    def get_status(self, obj):
-        return obj.get_runtime_status()
-
-    def get_display_status(self, obj):
-        return obj.get_display_status()
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Output-encode all admin-supplied free-text fields (SFR-06a / AR-08).
+        data["title"] = _encode_text(data.get("title", ""))
+        data["description"] = _encode_text(data.get("description", ""))
+        return data
 
     class Meta:
         model = Listing
@@ -84,9 +100,18 @@ class BidSerializer(serializers.ModelSerializer):
 
 
 class BidSubmitSerializer(serializers.Serializer):
-    """Validate an incoming bid submission (amount only)."""
+    """Validate an incoming bid submission.
 
-    amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    Enforces type (Decimal), sign (> 0), and range (≤ 12 digits, 2 d.p.)
+    constraints per NFSR-IN-03.
+    """
+
+    amount = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        min_value=Decimal("0.01"),
+        max_value=Decimal("9999999999.99"),
+    )
 
     def validate_amount(self, value):
         if value <= 0:
@@ -95,17 +120,65 @@ class BidSubmitSerializer(serializers.Serializer):
 
 
 class ListingCreateSerializer(serializers.Serializer):
-    """Validate admin listing creation input."""
+    """Validate admin listing creation and update input.
 
-    title = serializers.CharField(max_length=255)
-    description = serializers.CharField(required=False, allow_blank=True)
-    image_key = serializers.CharField(max_length=512, required=False, allow_blank=True)
-    category = serializers.CharField(max_length=50, required=False, default="Others")
-    starting_price = serializers.DecimalField(max_digits=12, decimal_places=2)
-    minimum_increment = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
+    All constraints follow NFSR-IN-03 (type, length, range, sign) with an
+    allowlist for the category field (FSR-IN-05).
+    """
+
+    title = serializers.CharField(
+        min_length=1,
+        max_length=255,
+        trim_whitespace=True,
+    )
+    description = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=10_000,
+    )
+    image_key = serializers.CharField(
+        max_length=512,
+        required=False,
+        allow_blank=True,
+    )
+    # Allowlist: only values defined in Listing.CATEGORY_CHOICES are accepted.
+    category = serializers.ChoiceField(
+        choices=_VALID_CATEGORIES,
+        required=False,
+        default="Others",
+    )
+    starting_price = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        min_value=Decimal("0.01"),
+        max_value=Decimal("9999999999.99"),
+    )
+    minimum_increment = serializers.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        min_value=Decimal("0.01"),
+        max_value=Decimal("9999999999.99"),
+        required=False,
+    )
     starts_at = serializers.DateTimeField(required=False)
     ends_at = serializers.DateTimeField(required=False)
     save_as_draft = serializers.BooleanField(required=False, default=False)
+
+    def validate_title(self, value):
+        stripped = value.strip()
+        if not stripped:
+            raise serializers.ValidationError("Title must not be blank.")
+        return stripped
+
+    def validate_starting_price(self, value):
+        if value <= 0:
+            raise serializers.ValidationError("Starting price must be greater than zero.")
+        return value
+
+    def validate_minimum_increment(self, value):
+        if value is not None and value <= 0:
+            raise serializers.ValidationError("Minimum increment must be greater than zero.")
+        return value
 
     def validate(self, data):
         save_as_draft = data.get("save_as_draft", False)
@@ -114,7 +187,7 @@ class ListingCreateSerializer(serializers.Serializer):
             return data
 
         required_fields = ["description", "minimum_increment", "starts_at", "ends_at"]
-        missing = [field for field in required_fields if field not in data]
+        missing = [field for field in required_fields if field not in data or data[field] is None]
         if missing:
             raise serializers.ValidationError(
                 {field: "This field is required." for field in missing}
@@ -128,8 +201,11 @@ class ListingCreateSerializer(serializers.Serializer):
 
 
 class ListingAdminSerializer(serializers.ModelSerializer):
-    """image_key is the raw stored key (for round-tripping into edit forms);
-    image_url is the short-lived signed URL for display."""
+    """Admin view of a listing — output-encodes free-text fields (SFR-06a / AR-08).
+
+    image_key is the raw stored key (for round-tripping into edit forms);
+    image_url is the short-lived signed URL for display.
+    """
 
     status = serializers.SerializerMethodField()
     display_status = serializers.SerializerMethodField()
@@ -143,6 +219,12 @@ class ListingAdminSerializer(serializers.ModelSerializer):
 
     def get_image_url(self, obj):
         return _image_signed_url(obj.image_key)
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["title"] = _encode_text(data.get("title", ""))
+        data["description"] = _encode_text(data.get("description", ""))
+        return data
 
     class Meta:
         model = Listing

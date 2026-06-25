@@ -20,6 +20,7 @@ from django.core.mail import BadHeaderError
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
+from django_ratelimit.decorators import ratelimit
 from django_otp.plugins.otp_totp.models import TOTPDevice
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -245,6 +246,10 @@ class VerifyEmailView(APIView):
         )
 
 
+@method_decorator(
+    ratelimit(key="ip", rate="10/m", method="POST", block=True),
+    name="post",
+)
 class LoginView(APIView):
     """Authenticate a verified user and start a session."""
 
@@ -303,16 +308,12 @@ class LogoutView(APIView):
 
 
 class UserProfileView(APIView):
-    """Read (and later update) the authenticated user's own profile."""
+    """Read the authenticated user's own profile."""
 
     permission_classes = [IsEmailVerified]
 
     def get(self, request):
         return Response(UserProfileSerializer(request.user).data, status=200)
-
-    def patch(self, request):
-        # TODO: allow updating safe profile fields (e.g. display_name).
-        return Response({"detail": "Not implemented."}, status=501)
 
 
 class PasswordResetRequestView(APIView):
