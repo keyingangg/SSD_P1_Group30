@@ -245,11 +245,11 @@ export default function Dashboard() {
                             {paymentBadgeLabel(won.payment_status)}
                           </span>
                           {isPending ? (
-                            <Link to={`/checkout/${won.order_id || won.listing_id}`} className="db-checkout-btn">
+                            <Link to={`/checkout/${won.order_id}`} className="db-checkout-btn">
                               Checkout →
                             </Link>
                           ) : (
-                            <Link to={`/checkout/${won.order_id || won.listing_id}`} className="db-view-btn">
+                            <Link to={`/orders/${won.order_id}`} className="db-view-btn">
                               View Order
                             </Link>
                           )}
@@ -276,7 +276,7 @@ export default function Dashboard() {
                                 );
                               })}
                             </div>
-                            <Link to={`/checkout/${won.order_id || won.listing_id}`} className="db-order-view-link">
+                            <Link to={`/orders/${won.order_id}`} className="db-order-view-link">
                               View full order details →
                             </Link>
                           </div>

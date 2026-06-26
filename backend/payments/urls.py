@@ -10,10 +10,16 @@ urlpatterns = [
         name="create-payment-intent",
     ),
     path("webhook/", views.StripeWebhookView.as_view(), name="stripe-webhook"),
+    path("orders/", views.AdminOrderListView.as_view(), name="admin-order-list"),
     path(
         "orders/<uuid:order_id>/",
         views.OrderDetailView.as_view(),
         name="order-detail",
+    ),
+    path(
+        "orders/<uuid:order_id>/confirm/",
+        views.ConfirmPaymentView.as_view(),
+        name="confirm-payment",
     ),
     path(
         "orders/<uuid:order_id>/fulfillment/",

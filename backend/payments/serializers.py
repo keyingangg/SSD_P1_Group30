@@ -2,15 +2,20 @@
 from rest_framework import serializers
 
 
-class OrderSerializer(serializers.Serializer):
-    """Serialize an order for the winning user / admin."""
-
-    # TODO: expose order fields scoped to the requesting role.
-    pass
-
-
 class CreatePaymentIntentSerializer(serializers.Serializer):
     """Validate a request to create a payment intent for an order."""
 
-    # TODO: define order_id field; verify caller is the order winner.
-    pass
+    order_id = serializers.UUIDField()
+    # Optional: the winner may supply/confirm a delivery address at checkout.
+    delivery_address = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=1000,
+        trim_whitespace=True,
+    )
+
+
+class UpdateFulfillmentSerializer(serializers.Serializer):
+    """Validate an admin fulfilment-status update."""
+
+    fulfillment_status = serializers.CharField(max_length=20)
