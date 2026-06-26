@@ -146,6 +146,21 @@ class Listing(models.Model):
                 winning_bid.is_winning = True
                 winning_bid.save(update_fields=["is_winning"])
 
+            # Create the fulfilment Order for the winner exactly once. Keyed on
+            # the winning bid (OneToOne) so repeated finalize calls — this runs
+            # on many GET requests — never create duplicate orders (FR-03).
+            # Imported here to avoid a circular import (payments imports Bid).
+            from payments.models import Order
+
+            Order.objects.get_or_create(
+                winning_bid=winning_bid,
+                defaults={
+                    "winner_id": winner_id,
+                    "delivery_address_snapshot": "",
+                    "fulfillment_status": "pending_payment",
+                },
+            )
+
         return bool(fields_to_update)
 
     @classmethod
