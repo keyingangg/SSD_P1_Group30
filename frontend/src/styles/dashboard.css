@@ -442,6 +442,20 @@
 }
 .db-history-sep { opacity: 0.5; }
 
+.db-history-table {
+  width: 100%; border-collapse: collapse; font-size: .83rem; margin-top: .75rem;
+}
+.db-history-table th {
+  text-align: left; font-size: .7rem; font-weight: 700; letter-spacing: .07em;
+  color: var(--muted); padding: .5rem .75rem; border-bottom: 1px solid var(--line);
+}
+.db-history-table td {
+  padding: .65rem .75rem; border-bottom: 1px solid var(--line); color: var(--text);
+  vertical-align: middle;
+}
+.db-history-table tr:last-child td { border-bottom: none; }
+.db-ht-title { max-width: 280px; font-weight: 500; }
+
 .db-empty { font-size: 13px; color: var(--muted); padding: 12px 0; }
 
 @media (max-width: 900px) {

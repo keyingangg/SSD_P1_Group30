@@ -60,7 +60,7 @@ function paymentBadgeLabel(status) {
   return status || "Pending";
 }
 
-const TABS = ["Overview", "Active Bids", "Won Auctions", "Order Status", "Account Settings"];
+const TABS = ["Overview", "Active Bids", "Won Auctions", "Order Status"];
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -117,10 +117,7 @@ export default function Dashboard() {
         <p className="db-eyebrow"><span className="db-eyebrow-rule" />Member Dashboard</p>
         <h1 className="db-name">Collection</h1>
         <div className="db-meta">
-          {user?.id && <span>Member #{String(user.id).padStart(5, "0")}</span>}
-          {joinedDate && <><span className="db-meta-sep">·</span><span>Joined {joinedDate}</span></>}
-          <span className="db-meta-sep">·</span>
-          <span className="db-meta-verified">Verified</span>
+          {joinedDate && <span>Joined {joinedDate}</span>}
           {user?.mfa_enabled && (
             <><span className="db-meta-sep">·</span><span className="db-meta-mfa">MFA Active</span></>
           )}
@@ -171,93 +168,280 @@ export default function Dashboard() {
 
       {!loading && !error && (
         <>
-          {/* Active Bids */}
-          <div className="db-section">
-            <div className="db-section-header">
-              <h2 className="db-section-title">Active Bids</h2>
-            </div>
-            {data.active_bids.length === 0 ? (
-              <p className="db-empty">No active bids yet.</p>
-            ) : (
-              <div className="db-bid-cards">
-                {data.active_bids.map((bid) => (
-                  <div
-                    key={bid.listing_id}
-                    className={`db-bid-card${bid.is_currently_winning ? "" : " db-bid-card--outbid"}`}
-                  >
-                    <div className="db-bid-thumb">
-                      {bid.image_url && <img src={bid.image_url} alt={bid.title} />}
-                    </div>
-                    <div className="db-bid-info">
-                      <p className="db-bid-lot">LOT {String(bid.listing_id).padStart(3, "0")}</p>
-                      <p className="db-bid-title">{bid.title}</p>
-                      <p className="db-bid-amounts">
-                        My bid: <strong>{formatSGD(bid.user_latest_bid_amount)}</strong>
-                        {" · "}Current: <strong>{formatSGD(bid.current_highest_bid)}</strong>
-                      </p>
-                    </div>
-                    <div className="db-bid-closes">Closes: {timeUntil(bid.ends_at)}</div>
-                    <div className="db-bid-status">
-                      {bid.is_currently_winning ? (
-                        <span className="db-badge db-badge--winning">Winning</span>
-                      ) : (
-                        <>
-                          <span className="db-badge db-badge--outbid">Outbid</span>
-                          <Link to={`/listings/${bid.listing_id}`} className="db-raise-btn">
-                            Raise Bid →
-                          </Link>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Won Auctions & Order Status */}
-          <div className="db-section">
-            <div className="db-section-header">
-              <h2 className="db-section-title">Won Auctions &amp; Order Status</h2>
-              <span className="db-section-meta">Fulfilment status updated by SecureBid · Read-only</span>
-            </div>
-            {data.won_auctions.length === 0 ? (
-              <p className="db-empty">No won auctions yet.</p>
-            ) : (
-              <div className="db-won-cards">
-                {data.won_auctions.map((won) => {
-                  const stepIdx = orderStepIndex(won.payment_status);
-                  const isPending = stepIdx === 0;
-                  return (
-                    <div key={won.listing_id} className="db-won-card">
-                      <div className="db-won-card-main">
-                        <div className="db-won-thumb">
-                          {won.image_url && <img src={won.image_url} alt={won.title} />}
+          {/* Overview */}
+          {activeTab === 0 && (
+            <>
+              <div className="db-section">
+                <div className="db-section-header">
+                  <h2 className="db-section-title">Active Bids</h2>
+                </div>
+                {data.active_bids.length === 0 ? (
+                  <p className="db-empty">No active bids yet.</p>
+                ) : (
+                  <div className="db-bid-cards">
+                    {data.active_bids.map((bid) => (
+                      <div
+                        key={bid.listing_id}
+                        className={`db-bid-card${bid.is_currently_winning ? "" : " db-bid-card--outbid"}`}
+                      >
+                        <div className="db-bid-thumb">
+                          {bid.image_url && <img src={bid.image_url} alt={bid.title} />}
                         </div>
-                        <div className="db-won-info">
-                          <p className="db-won-lot">LOT {String(won.listing_id).padStart(3, "0")}</p>
-                          <p className="db-won-title">{won.title}</p>
-                          <p className="db-won-date">Won {formatDate(won.ended_at)}</p>
+                        <div className="db-bid-info">
+                          <p className="db-bid-lot">LOT {String(bid.listing_id).padStart(3, "0")}</p>
+                          <p className="db-bid-title">{bid.title}</p>
+                          <p className="db-bid-amounts">
+                            My bid: <strong>{formatSGD(bid.user_latest_bid_amount)}</strong>
+                            {" · "}Current: <strong>{formatSGD(bid.current_highest_bid)}</strong>
+                          </p>
                         </div>
-                        <div className="db-won-price">{formatSGD(won.winning_amount)}</div>
-                        <div className="db-won-actions">
-                          <span className={`db-badge ${paymentBadgeClass(won.payment_status)}`}>
-                            {paymentBadgeLabel(won.payment_status)}
-                          </span>
-                          {isPending ? (
-                            <Link to={`/checkout/${won.order_id}`} className="db-checkout-btn">
-                              Checkout →
-                            </Link>
+                        <div className="db-bid-closes">Closes: {timeUntil(bid.ends_at)}</div>
+                        <div className="db-bid-status">
+                          {bid.is_currently_winning ? (
+                            <span className="db-badge db-badge--winning">Winning</span>
                           ) : (
-                            <Link to={`/orders/${won.order_id}`} className="db-view-btn">
-                              View Order
-                            </Link>
+                            <>
+                              <span className="db-badge db-badge--outbid">Outbid</span>
+                              <Link to={`/listings/${bid.listing_id}`} className="db-raise-btn">
+                                Raise Bid →
+                              </Link>
+                            </>
                           )}
                         </div>
                       </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-                      {/* Order tracker (only when paid/beyond) */}
-                      {stepIdx > 0 && (
+              <div className="db-section">
+                <div className="db-section-header">
+                  <h2 className="db-section-title">Won Auctions &amp; Order Status</h2>
+                  <span className="db-section-meta">Fulfilment status updated by SecureBid · Read-only</span>
+                </div>
+                {data.won_auctions.length === 0 ? (
+                  <p className="db-empty">No won auctions yet.</p>
+                ) : (
+                  <div className="db-won-cards">
+                    {data.won_auctions.map((won) => {
+                      const stepIdx = orderStepIndex(won.payment_status);
+                      const isPending = stepIdx === 0;
+                      return (
+                        <div key={won.listing_id} className="db-won-card">
+                          <div className="db-won-card-main">
+                            <div className="db-won-thumb">
+                              {won.image_url && <img src={won.image_url} alt={won.title} />}
+                            </div>
+                            <div className="db-won-info">
+                              <p className="db-won-lot">LOT {String(won.listing_id).padStart(3, "0")}</p>
+                              <p className="db-won-title">{won.title}</p>
+                              <p className="db-won-date">Won {formatDate(won.ended_at)}</p>
+                            </div>
+                            <div className="db-won-price">{formatSGD(won.winning_amount)}</div>
+                            <div className="db-won-actions">
+                              <span className={`db-badge ${paymentBadgeClass(won.payment_status)}`}>
+                                {paymentBadgeLabel(won.payment_status)}
+                              </span>
+                              {isPending ? (
+                                <Link to={`/checkout/${won.order_id}`} className="db-checkout-btn">Checkout →</Link>
+                              ) : (
+                                <Link to={`/orders/${won.order_id}`} className="db-view-btn">View Order</Link>
+                              )}
+                            </div>
+                          </div>
+                          {stepIdx > 0 && (
+                            <div className="db-order-status">
+                              <p className="db-order-label">Order Status</p>
+                              <div style={{ display: "flex", alignItems: "flex-start", gap: 0 }}>
+                                <div className="db-order-track" style={{ flex: 1 }}>
+                                  {ORDER_STEPS.map((step, i) => {
+                                    const done = i + 1 < stepIdx;
+                                    const current = i + 1 === stepIdx;
+                                    return (
+                                      <div key={step} className={`db-order-step${done ? " db-order-step--done" : ""}${current ? " db-order-step--current" : ""}`}>
+                                        <div className="db-order-dot" />
+                                        <span className="db-order-step-name">{step}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                <Link to={`/orders/${won.order_id}`} className="db-order-view-link">View full order details →</Link>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="db-history">
+                <div className="db-section-header">
+                  <h2 className="db-section-title">Auction History</h2>
+                </div>
+                {data.auction_history.filter(h => h.result !== "active").length === 0 ? (
+                  <p className="db-empty">No auction history yet.</p>
+                ) : (
+                  <table className="db-history-table">
+                    <thead>
+                      <tr>
+                        <th>Item</th>
+                        <th>Result</th>
+                        <th>My Bid</th>
+                        <th>Final Price</th>
+                        <th>Ended</th>
+                        <th>Bids Placed</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.auction_history.filter(h => h.result !== "active").map(h => (
+                        <tr key={h.listing_id}>
+                          <td className="db-ht-title">{h.title}</td>
+                          <td>
+                            <span className={`db-badge ${h.result === "won" ? "db-badge--winning" : "db-badge--outbid"}`}>
+                              {h.result === "won" ? "Won" : h.result === "ended_no_winner" ? "No Winner" : "Lost"}
+                            </span>
+                          </td>
+                          <td>{formatSGD(h.user_latest_bid_amount)}</td>
+                          <td>{formatSGD(h.final_price)}</td>
+                          <td>{formatDate(h.ends_at)}</td>
+                          <td>{h.user_bid_count}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* Active Bids */}
+          {activeTab === 1 && (
+            <div className="db-section">
+              <div className="db-section-header">
+                <h2 className="db-section-title">Active Bids</h2>
+              </div>
+              {data.active_bids.length === 0 ? (
+                <p className="db-empty">No active bids yet.</p>
+              ) : (
+                <div className="db-bid-cards">
+                  {data.active_bids.map((bid) => (
+                    <div
+                      key={bid.listing_id}
+                      className={`db-bid-card${bid.is_currently_winning ? "" : " db-bid-card--outbid"}`}
+                    >
+                      <div className="db-bid-thumb">
+                        {bid.image_url && <img src={bid.image_url} alt={bid.title} />}
+                      </div>
+                      <div className="db-bid-info">
+                        <p className="db-bid-lot">LOT {String(bid.listing_id).padStart(3, "0")}</p>
+                        <p className="db-bid-title">{bid.title}</p>
+                        <p className="db-bid-amounts">
+                          My bid: <strong>{formatSGD(bid.user_latest_bid_amount)}</strong>
+                          {" · "}Current: <strong>{formatSGD(bid.current_highest_bid)}</strong>
+                        </p>
+                      </div>
+                      <div className="db-bid-closes">Closes: {timeUntil(bid.ends_at)}</div>
+                      <div className="db-bid-status">
+                        {bid.is_currently_winning ? (
+                          <span className="db-badge db-badge--winning">Winning</span>
+                        ) : (
+                          <>
+                            <span className="db-badge db-badge--outbid">Outbid</span>
+                            <Link to={`/listings/${bid.listing_id}`} className="db-raise-btn">
+                              Raise Bid →
+                            </Link>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Won Auctions */}
+          {activeTab === 2 && (
+            <div className="db-section">
+              <div className="db-section-header">
+                <h2 className="db-section-title">Won Auctions</h2>
+              </div>
+              {data.won_auctions.length === 0 ? (
+                <p className="db-empty">No won auctions yet.</p>
+              ) : (
+                <div className="db-won-cards">
+                  {data.won_auctions.map((won) => {
+                    const stepIdx = orderStepIndex(won.payment_status);
+                    const isPending = stepIdx === 0;
+                    return (
+                      <div key={won.listing_id} className="db-won-card">
+                        <div className="db-won-card-main">
+                          <div className="db-won-thumb">
+                            {won.image_url && <img src={won.image_url} alt={won.title} />}
+                          </div>
+                          <div className="db-won-info">
+                            <p className="db-won-lot">LOT {String(won.listing_id).padStart(3, "0")}</p>
+                            <p className="db-won-title">{won.title}</p>
+                            <p className="db-won-date">Won {formatDate(won.ended_at)}</p>
+                          </div>
+                          <div className="db-won-price">{formatSGD(won.winning_amount)}</div>
+                          <div className="db-won-actions">
+                            <span className={`db-badge ${paymentBadgeClass(won.payment_status)}`}>
+                              {paymentBadgeLabel(won.payment_status)}
+                            </span>
+                            {isPending ? (
+                              <Link to={`/checkout/${won.order_id}`} className="db-checkout-btn">
+                                Checkout →
+                              </Link>
+                            ) : (
+                              <Link to={`/orders/${won.order_id}`} className="db-view-btn">
+                                View Order
+                              </Link>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Order Status */}
+          {activeTab === 3 && (
+            <div className="db-section">
+              <div className="db-section-header">
+                <h2 className="db-section-title">Order Status</h2>
+                <span className="db-section-meta">Fulfilment status updated by SecureBid · Read-only</span>
+              </div>
+              {data.won_auctions.filter(w => orderStepIndex(w.payment_status) > 0).length === 0 ? (
+                <p className="db-empty">No orders in progress.</p>
+              ) : (
+                <div className="db-won-cards">
+                  {data.won_auctions.filter(w => orderStepIndex(w.payment_status) > 0).map((won) => {
+                    const stepIdx = orderStepIndex(won.payment_status);
+                    return (
+                      <div key={won.listing_id} className="db-won-card">
+                        <div className="db-won-card-main">
+                          <div className="db-won-thumb">
+                            {won.image_url && <img src={won.image_url} alt={won.title} />}
+                          </div>
+                          <div className="db-won-info">
+                            <p className="db-won-lot">LOT {String(won.listing_id).padStart(3, "0")}</p>
+                            <p className="db-won-title">{won.title}</p>
+                            <p className="db-won-date">Won {formatDate(won.ended_at)}</p>
+                          </div>
+                          <div className="db-won-price">{formatSGD(won.winning_amount)}</div>
+                          <div className="db-won-actions">
+                            <span className={`db-badge ${paymentBadgeClass(won.payment_status)}`}>
+                              {paymentBadgeLabel(won.payment_status)}
+                            </span>
+                            <Link to={`/orders/${won.order_id}`} className="db-view-btn">View Order</Link>
+                          </div>
+                        </div>
                         <div className="db-order-status">
                           <p className="db-order-label">Order Status</p>
                           <div style={{ display: "flex", alignItems: "flex-start", gap: 0 }}>
@@ -281,30 +465,13 @@ export default function Dashboard() {
                             </Link>
                           </div>
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Auction History */}
-          <div className="db-history">
-            <div className="db-section-header">
-              <h2 className="db-section-title">Auction History</h2>
-              <Link to="/auctions" className="db-section-link">View all</Link>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-            <div className="db-history-bar">
-              <span>{data.won_auctions.length} auctions won</span>
-              <span className="db-history-sep">·</span>
-              <span>{data.active_bids.length} active bids</span>
-              <span className="db-history-sep">·</span>
-              <span>{formatSGD(totalAcquired)} total acquisitions{joinedDate ? ` since ${joinedDate}` : ""}</span>
-              <span className="db-history-sep">·</span>
-              <span>Account in good standing</span>
-            </div>
-          </div>
+          )}
         </>
       )}
     </main>
