@@ -8,6 +8,7 @@ import { getCategoryOptions } from "../../config/categories.js";
 const SGT_TZ = "Asia/Singapore";
 
 function toSGTInput(value) {
+  if (value === null || value === undefined || value === "") return "";
   const d = value instanceof Date ? value : new Date(value);
   if (isNaN(d.getTime())) return "";
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -110,19 +111,37 @@ export default function AdminCreate() {
         imageKey = res.key;
       }
       const payload = {
-        title: form.title, description: form.description,
-        category: form.category, image_key: imageKey,
+        title: form.title,
+        description: form.description,
+        category: form.category,
+        image_key: imageKey,
         starting_price: form.startingPrice.replace(/,/g, ""),
-        minimum_increment: form.minimumIncrement.replace(/,/g, ""),
-        starts_at: form.startTime, ends_at: form.endTime,
         save_as_draft: isDraft,
       };
+
+      const minimumIncrement = form.minimumIncrement.trim();
+      if (minimumIncrement) {
+        payload.minimum_increment = minimumIncrement.replace(/,/g, "");
+      }
+      if (isDraft) {
+        payload.starts_at = form.startTime || null;
+        payload.ends_at = form.endTime || null;
+      } else {
+        if (form.startTime) {
+          payload.starts_at = form.startTime;
+        }
+        if (form.endTime) {
+          payload.ends_at = form.endTime;
+        }
+      }
       if (isEdit) {
         await updateListing(editingId, payload);
         navigate("/admin/listings");
       } else {
         await createListing(payload);
         if (isDraft) {
+          if (fileRef.current) fileRef.current.value = "";
+          setForm(EMPTY);
           setMessage({ type: "success", text: "Draft saved." });
         } else {
           navigate("/admin/listings");
@@ -241,7 +260,7 @@ export default function AdminCreate() {
               <div className="acf-field">
                 <label htmlFor="startTime">Auction Opens (Date &amp; Time SGT)</label>
                 <input id="startTime" type="datetime-local"
-                  value={form.startTime} min={isEdit ? undefined : nowSGT}
+                  value={form.startTime} min={nowSGT}
                   onChange={e => {
                     const v = e.target.value;
                     setForm(p => ({ ...p, startTime: v, endTime: p.endTime && p.endTime < v ? v : p.endTime }));
@@ -250,7 +269,7 @@ export default function AdminCreate() {
               <div className="acf-field">
                 <label htmlFor="endTime">Auction Closes (Date &amp; Time SGT)</label>
                 <input id="endTime" type="datetime-local"
-                  value={form.endTime} min={isEdit ? undefined : minEnd}
+                  value={form.endTime} min={minEnd}
                   onChange={e => setForm(p => ({ ...p, endTime: e.target.value }))} />
               </div>
             </div>

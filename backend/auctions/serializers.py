@@ -164,8 +164,8 @@ class ListingCreateSerializer(serializers.Serializer):
         max_value=Decimal("9999999999.99"),
         required=False,
     )
-    starts_at = serializers.DateTimeField(required=False)
-    ends_at = serializers.DateTimeField(required=False)
+    starts_at = serializers.DateTimeField(required=False, allow_null=True)
+    ends_at = serializers.DateTimeField(required=False, allow_null=True)
     save_as_draft = serializers.BooleanField(required=False, default=False)
 
     def validate_title(self, value):

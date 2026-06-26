@@ -50,8 +50,8 @@ class Listing(models.Model):
         max_digits=12, decimal_places=2, default=0
     )
     minimum_increment = models.DecimalField(max_digits=12, decimal_places=2)
-    starts_at = models.DateTimeField()
-    ends_at = models.DateTimeField()
+    starts_at = models.DateTimeField(null=True, blank=True)
+    ends_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default="draft"
     )

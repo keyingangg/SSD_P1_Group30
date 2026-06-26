@@ -1,6 +1,5 @@
 """API views for the auctions app."""
 import logging
-from datetime import timedelta
 from decimal import Decimal
 
 from django.core.exceptions import PermissionDenied
@@ -129,14 +128,13 @@ class ListingCreateView(APIView):
 
         data = serializer.validated_data
         save_as_draft = data.get("save_as_draft", False)
-        now = timezone.now()
 
         img_key = data.get("image_key")
         if isinstance(img_key, str) and img_key.strip() == "":
             img_key = None
 
-        starts_at = data.get("starts_at") or now
-        ends_at = data.get("ends_at") or (starts_at + timedelta(days=1))
+        starts_at = data.get("starts_at")
+        ends_at = data.get("ends_at")
         minimum_increment = data.get("minimum_increment") or Decimal("1.00")
 
         listing = Listing.objects.create(
@@ -190,14 +188,15 @@ class ListingUpdateView(APIView):
 
         data = serializer.validated_data
         save_as_draft = data.get("save_as_draft", False)
+
         listing.title = data["title"]
-        listing.description = data["description"]
+        listing.description = data.get("description", listing.description)
         listing.category = data.get("category", listing.category)
         listing.image_key = data.get("image_key", listing.image_key)
         listing.starting_price = data["starting_price"]
-        listing.minimum_increment = data["minimum_increment"]
-        listing.starts_at = data["starts_at"]
-        listing.ends_at = data["ends_at"]
+        listing.minimum_increment = data.get("minimum_increment", listing.minimum_increment)
+        listing.starts_at = data.get("starts_at", listing.starts_at)
+        listing.ends_at = data.get("ends_at", listing.ends_at)
 
         if listing.status == "cancelled":
             pass
