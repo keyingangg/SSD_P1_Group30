@@ -116,8 +116,11 @@ class ListingDetailView(APIView):
 
         if request.user.is_authenticated and not request.user.is_staff:
             user_top_bid = listing.bids.filter(bidder=request.user).order_by("-amount").first()
+            winning_bid = listing.bids.filter(is_winning=True).first()
             data = dict(data)
-            data["user_won"] = listing.winner_id == request.user.id
+            data["user_won"] = (
+                winning_bid is not None and winning_bid.bidder_id == request.user.id
+            ) or listing.winner_id == request.user.id
             data["user_highest_bid"] = str(user_top_bid.amount) if user_top_bid else None
 
         return Response(data)
@@ -459,8 +462,16 @@ class ListingBidsView(BidImmutableMixin, APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, listing_id):
+        try:
+            listing = Listing.objects.get(pk=listing_id)
+        except Listing.DoesNotExist:
+            return Response({"detail": "Listing not found."}, status=404)
+
+        if not request.user.is_staff and listing.status in {"draft", "cancelled"}:
+            return Response({"detail": "Listing not found."}, status=404)
+
         bids = (
-            Bid.objects.filter(listing_id=listing_id)
+            Bid.objects.filter(listing=listing)
             .order_by("-submitted_at", "-id")
             .values("id", "anonymous_identifier", "amount", "submitted_at", "is_winning")
         )
