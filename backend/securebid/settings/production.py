@@ -33,6 +33,14 @@ CORS_ALLOWED_ORIGINS = [
     if origin.strip()
 ]
 
+# Django 4.0+ requires CSRF_TRUSTED_ORIGINS to include the full scheme+host
+# for any non-localhost origin (enforced when Origin header is present).
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
 # Force HTTPS — disable via env var when deploying without a TLS certificate
 # (e.g. school EC2 with a raw IP address).  Set SECURE_SSL=false in .env to
 # serve over HTTP. Leave unset (defaults to true) for real production.
