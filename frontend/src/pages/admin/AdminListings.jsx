@@ -5,13 +5,14 @@ import AdminLayout from "../../components/admin/AdminLayout.jsx";
 import axiosClient from "../../api/axiosClient.js";
 import { deleteListing, getListings } from "../../api/auctions.js";
 
-const TABS = ["All Lots", "Live", "Scheduled", "Ended", "Draft"];
+const TABS = ["All Lots", "Live", "Scheduled", "Ended", "Draft", "Cancelled"];
 
 const TAB_STATUS = {
   "Live": "active",
   "Scheduled": "scheduled",
   "Ended": "ended",
   "Draft": "draft",
+  "Cancelled": "cancelled",
 };
 
 function fmtDate(val) {
@@ -32,7 +33,7 @@ function StatusBadge({ status }) {
   const map = {
     active: ["al-badge al-badge--live", "LIVE"],
     ended: ["al-badge al-badge--ended", "ENDED"],
-    cancelled: ["al-badge al-badge--ended", "CANCELLED"],
+    cancelled: ["al-badge al-badge--cancelled", "CANCELLED"],
     scheduled: ["al-badge al-badge--scheduled", "SCHEDULED"],
     draft: ["al-badge al-badge--draft", "DRAFT"],
   };
@@ -71,7 +72,7 @@ export default function AdminListings() {
     if (!window.confirm("Cancel this auction? All bidders will be notified by email.")) return;
     try {
       await axiosClient.post(`/auctions/${id}/cancel/`);
-      load();
+      setListings(prev => prev.map(l => l.id === id ? { ...l, status: "cancelled" } : l));
     } catch (err) {
       alert(err?.response?.data?.detail || "Could not cancel auction.");
     }
@@ -82,7 +83,7 @@ export default function AdminListings() {
     return String(l.status).toLowerCase() === TAB_STATUS[tab];
   });
 
-  const isLocked = (l) => Number(l.bid_count) > 0 && l.status !== "cancelled";
+  const isLocked = (l) => l.status === "active";
 
   return (
     <AdminLayout>
@@ -158,11 +159,10 @@ export default function AdminListings() {
                     {/* Actions */}
                     <td>
                       <div className="al-actions">
-                        {isLocked(l) ? (
+                        {(l.status === "ended" || l.status === "cancelled") ? null : isLocked(l) ? (
                           <>
                             <p className="al-locked-note">Active bids — core edit locked</p>
                             <div className="al-action-btns">
-                              <button className="al-btn" onClick={() => navigate(`/admin/add-item?edit=${l.id}`)}>Add Info</button>
                               <button className="al-btn al-btn--danger" onClick={() => handleCancel(l.id)}>Cancel</button>
                             </div>
                           </>
@@ -180,15 +180,6 @@ export default function AdminListings() {
             </table>
           </div>
 
-          {/* Legend */}
-          <div className="al-legend">
-            <span><span className="al-legend-dot" style={{ background: "var(--gold)" }} />
-              <strong>Add Info</strong> — Append photos or a timestamped admin note while live. Existing content unchanged.
-            </span>
-            <span><span className="al-legend-dot" style={{ background: "#c0392b" }} />
-              <strong>Cancel</strong> — Terminates auction, emails all bidders, unlocks full edit &amp; delete.
-            </span>
-          </div>
         </>
       )}
     </AdminLayout>

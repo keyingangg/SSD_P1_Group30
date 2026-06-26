@@ -80,7 +80,11 @@ class ListingListView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        Listing.finalize_ended_auctions()
+        now = timezone.now()
+        Listing.finalize_ended_auctions(now=now)
+        Listing.objects.filter(
+            status="scheduled", starts_at__lte=now, ends_at__gt=now
+        ).update(status="active")
         queryset = Listing.objects.all().order_by("-starts_at")
         if not request.user.is_staff:
             queryset = queryset.exclude(status__in=["draft", "cancelled"])
@@ -94,7 +98,11 @@ class ListingDetailView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, listing_id):
-        Listing.finalize_ended_auctions()
+        now = timezone.now()
+        Listing.finalize_ended_auctions(now=now)
+        Listing.objects.filter(
+            status="scheduled", starts_at__lte=now, ends_at__gt=now
+        ).update(status="active")
         try:
             listing = Listing.objects.get(pk=listing_id)
         except Listing.DoesNotExist:
@@ -143,7 +151,7 @@ class ListingCreateView(APIView):
             description=data.get("description", ""),
             image_key=img_key,
             category=data.get("category", "Others"),
-            starting_price=data["starting_price"],
+            starting_price=data.get("starting_price") or Decimal("0.00"),
             minimum_increment=minimum_increment,
             starts_at=starts_at,
             ends_at=ends_at,
@@ -170,16 +178,14 @@ class ListingUpdateView(APIView):
         except Listing.DoesNotExist:
             return Response({"detail": "Listing not found."}, status=404)
 
-        # SFR-06c: prevent modification of a listing that has received bids
-        # unless the auction has already been cancelled.
+        if listing.status == "active":
+            return Response(
+                {"detail": "This listing cannot be modified while the auction is live. Cancel it first."},
+                status=409,
+            )
         if listing.bids.exists() and listing.status != "cancelled":
             return Response(
-                {
-                    "detail": (
-                        "This listing cannot be modified because bids have already been placed. "
-                        "Cancel the auction first, then make changes."
-                    )
-                },
+                {"detail": "This listing cannot be modified because bids have already been placed. Cancel the auction first, then make changes."},
                 status=409,
             )
 
@@ -193,7 +199,7 @@ class ListingUpdateView(APIView):
         listing.description = data.get("description", listing.description)
         listing.category = data.get("category", listing.category)
         listing.image_key = data.get("image_key", listing.image_key)
-        listing.starting_price = data["starting_price"]
+        listing.starting_price = data.get("starting_price") or listing.starting_price or Decimal("0.00")
         listing.minimum_increment = data.get("minimum_increment", listing.minimum_increment)
         listing.starts_at = data.get("starts_at", listing.starts_at)
         listing.ends_at = data.get("ends_at", listing.ends_at)

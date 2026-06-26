@@ -430,6 +430,17 @@
 .acf-msg--success { background: rgba(220,255,220,.4); border-color: rgba(20,120,20,.15); color: #0b5920; }
 .acf-msg--error   { background: rgba(255,230,230,.6); border-color: rgba(180,20,20,.12); color: #7a0000; }
 
+.acf-toast {
+  position: fixed; top: 1.25rem; left: 50%; transform: translateX(-50%);
+  z-index: 9999; padding: .8rem 1.4rem;
+  font-size: .875rem; font-weight: 500;
+  border: 1px solid; white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0,0,0,.12);
+  pointer-events: none;
+}
+.acf-toast--error   { background: #fff0f0; border-color: rgba(180,20,20,.25); color: #7a0000; }
+.acf-toast--success { background: #f0fff4; border-color: rgba(20,120,20,.2);  color: #0b5920; }
+
 .acf-card {
   background: #fff;
   border: 1px solid rgba(27,26,23,.12);
@@ -656,10 +667,11 @@
   border: 1px solid;
   white-space: nowrap;
 }
-.al-badge--live     { color: #1a7a4a; background: #edfaf3; border-color: rgba(26,122,74,.3); }
-.al-badge--ended    { color: #555;    background: #f2f2f0; border-color: rgba(0,0,0,.15); }
-.al-badge--scheduled{ color: #7a5a10; background: #fef9ec; border-color: var(--gold); }
-.al-badge--draft    { color: #666;    background: #f5f5f3; border-color: rgba(0,0,0,.12); }
+.al-badge--live      { color: #1a7a4a; background: #edfaf3; border-color: rgba(26,122,74,.3); }
+.al-badge--ended     { color: #1a3a6b; background: #e8eef8; border-color: rgba(26,58,107,.3); }
+.al-badge--scheduled { color: #7a5a10; background: #fef9ec; border-color: var(--gold); }
+.al-badge--draft     { color: #666;    background: #f5f5f3; border-color: rgba(0,0,0,.12); }
+.al-badge--cancelled { color: #8b1a1a; background: #fdecea; border-color: rgba(139,26,26,.3); }
 
 /* Actions */
 .al-actions { display: flex; flex-direction: column; gap: .35rem; align-items: flex-start; }

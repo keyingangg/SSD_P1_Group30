@@ -34,10 +34,15 @@ export default function AdminCreate() {
   const isEdit = Boolean(editingId);
 
   const [form, setForm] = useState(EMPTY);
+  const [listingStatus, setListingStatus] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(isEdit);
   const [message, setMessage] = useState(null);
+  const showError = (text) => {
+    setMessage({ type: "error", text });
+    setTimeout(() => setMessage(m => m?.text === text ? null : m), 4000);
+  };
   const [dragging, setDragging] = useState(false);
 
   const nowSGT = toSGTInput(new Date());
@@ -51,6 +56,7 @@ export default function AdminCreate() {
       try {
         const l = await getListingDetail(editingId);
         if (cancelled) return;
+        setListingStatus(l.status || null);
         setForm({
           title: l.title || "", description: l.description || "",
           category: l.category || "Others",
@@ -60,7 +66,7 @@ export default function AdminCreate() {
           images: [], imageKey: l.image_key || "", imageUrl: l.image_url || "",
         });
       } catch {
-        if (!cancelled) setMessage({ type: "error", text: "Could not load listing for editing." });
+        if (!cancelled) showError("Could not load listing for editing.");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -83,18 +89,19 @@ export default function AdminCreate() {
     const action = e.nativeEvent?.submitter?.dataset?.action || "publish";
     const isDraft = action === "draft";
 
-    if (!form.title.trim() || !form.startingPrice.trim()) {
-      setMessage({ type: "error", text: "Item Name and Starting Price are required." });
-      return;
-    }
-    if (!isDraft) {
+    if (isDraft) {
+      if (!form.title.trim()) { showError("Item Name is required to save a draft."); return; }
+    } else {
       const missing = [];
+      if (!form.title.trim()) missing.push("Item Name");
       if (!form.description.trim()) missing.push("Item Description");
+      if (!form.startingPrice.trim()) missing.push("Starting Price");
       if (!form.minimumIncrement.trim()) missing.push("Minimum Bid Increment");
       if (!form.startTime) missing.push("Auction Opens");
       if (!form.endTime) missing.push("Auction Closes");
+      if (!form.images?.length && !form.imageKey) missing.push("Item Image");
       if (missing.length) {
-        setMessage({ type: "error", text: `Please complete: ${missing.join(", ")}.` });
+        showError(`Please complete: ${missing.join(", ")}.`);
         return;
       }
     }
@@ -115,9 +122,10 @@ export default function AdminCreate() {
         description: form.description,
         category: form.category,
         image_key: imageKey,
-        starting_price: form.startingPrice.replace(/,/g, ""),
         save_as_draft: isDraft,
       };
+      const startingPrice = form.startingPrice.replace(/,/g, "").trim();
+      if (startingPrice) payload.starting_price = startingPrice;
 
       const minimumIncrement = form.minimumIncrement.trim();
       if (minimumIncrement) {
@@ -139,13 +147,7 @@ export default function AdminCreate() {
         navigate("/admin/listings");
       } else {
         await createListing(payload);
-        if (isDraft) {
-          if (fileRef.current) fileRef.current.value = "";
-          setForm(EMPTY);
-          setMessage({ type: "success", text: "Draft saved." });
-        } else {
-          navigate("/admin/listings");
-        }
+        navigate("/admin/listings");
       }
     } catch (err) {
       const resp = err?.response?.data;
@@ -154,7 +156,7 @@ export default function AdminCreate() {
       else if (typeof resp === "object") {
         text = Object.entries(resp).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(" ") : v}`).join(" · ");
       }
-      setMessage({ type: "error", text });
+      showError(text);
     } finally {
       setUploading(false);
       setSubmitting(false);
@@ -171,11 +173,19 @@ export default function AdminCreate() {
         <span>{isEdit ? "Edit Lot" : "New Lot"}</span>
       </nav>
 
-      <h1 className="acf-title">{isEdit ? "Edit Auction Listing" : "Create Auction Listing"}</h1>
+      <h1 className="acf-title">
+        {isEdit ? "Edit Auction Listing" : "Create Auction Listing"}
+        {isEdit && listingStatus === "draft" && (
+          <span style={{ marginLeft: ".65rem", fontSize: ".55em", fontWeight: 700, letterSpacing: ".08em", verticalAlign: "middle", padding: ".2em .55em", border: "1px solid rgba(0,0,0,.15)", color: "#888", background: "#f5f5f3" }}>DRAFT</span>
+        )}
+      </h1>
       <div className="acf-title-rule" />
 
-      {message && (
-        <div className={`acf-msg acf-msg--${message.type}`}>{message.text}</div>
+      {message && message.type === "error" && (
+        <div className={`acf-toast acf-toast--error`}>{message.text}</div>
+      )}
+      {message && message.type === "success" && (
+        <div className="acf-msg acf-msg--success">{message.text}</div>
       )}
 
       {loading ? <p style={{ opacity: .6 }}>Loading…</p> : (
@@ -188,23 +198,15 @@ export default function AdminCreate() {
             <div className="acf-field">
               <label htmlFor="title">Item Name / Title</label>
               <input id="title" type="text" placeholder="e.g. Rolex Submariner Date Ref. 126610LN"
-                value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} required />
+                value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} />
             </div>
 
-            <div className="acf-two-col">
-              <div className="acf-field">
-                <label htmlFor="brand">Brand / Maker</label>
-                <input id="brand" type="text" placeholder="e.g. Rolex, Hermès, Patek Philippe"
-                  value={form.brand || ""}
-                  onChange={e => setForm(p => ({ ...p, brand: e.target.value }))} />
-              </div>
-              <div className="acf-field">
-                <label htmlFor="category">Category</label>
-                <select id="category" value={form.category}
-                  onChange={e => setForm(p => ({ ...p, category: e.target.value }))}>
-                  {getCategoryOptions().map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
+            <div className="acf-field">
+              <label htmlFor="category">Category</label>
+              <select id="category" value={form.category}
+                onChange={e => setForm(p => ({ ...p, category: e.target.value }))}>
+                {getCategoryOptions().map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
             </div>
 
             <div className="acf-field">
@@ -246,7 +248,7 @@ export default function AdminCreate() {
                 <label htmlFor="startingPrice">Starting Price (SGD)</label>
                 <input id="startingPrice" type="text" placeholder="0.00"
                   value={form.startingPrice}
-                  onChange={e => setForm(p => ({ ...p, startingPrice: e.target.value }))} required />
+                  onChange={e => setForm(p => ({ ...p, startingPrice: e.target.value }))} />
               </div>
               <div className="acf-field">
                 <label htmlFor="minimumIncrement">Minimum Bid Increment (SGD)</label>
@@ -279,7 +281,7 @@ export default function AdminCreate() {
             <div className="acf-actions">
               <button type="submit" data-action="publish" className="acf-btn-publish"
                 disabled={submitting || uploading}>
-                {uploading ? "Uploading…" : submitting ? (isEdit ? "Updating…" : "Publishing…") : (isEdit ? "Update Listing" : "Publish Listing")}
+                {uploading ? "Uploading…" : submitting ? "Publishing…" : (isEdit && listingStatus !== "draft" ? "Update Listing" : "Publish Listing")}
               </button>
               <button type="submit" data-action="draft" className="acf-btn-outline"
                 disabled={submitting || uploading}>

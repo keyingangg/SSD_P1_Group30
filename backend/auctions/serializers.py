@@ -156,6 +156,8 @@ class ListingCreateSerializer(serializers.Serializer):
         decimal_places=2,
         min_value=Decimal("0.01"),
         max_value=Decimal("9999999999.99"),
+        required=False,
+        allow_null=True,
     )
     minimum_increment = serializers.DecimalField(
         max_digits=12,
@@ -190,7 +192,7 @@ class ListingCreateSerializer(serializers.Serializer):
         if save_as_draft:
             return data
 
-        required_fields = ["description", "minimum_increment", "starts_at", "ends_at"]
+        required_fields = ["starting_price", "description", "minimum_increment", "starts_at", "ends_at"]
         missing = [field for field in required_fields if field not in data or data[field] is None]
         if missing:
             raise serializers.ValidationError(
