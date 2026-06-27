@@ -689,6 +689,52 @@
   margin-top: 6px;
 }
 
+/* Cancelled banner */
+.ld-cancelled-banner {
+  margin-bottom: 14px;
+  padding: 28px 24px 20px;
+  background: #fdf4f4;
+  border: 1px solid #e8c8c8;
+  text-align: center;
+}
+.ld-cancelled-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #f5dede;
+  border: 1.5px solid #b85c5c;
+  color: #b85c5c;
+  font-size: 20px;
+  font-weight: 400;
+  margin-bottom: 14px;
+}
+.ld-cancelled-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: #8b1a1a;
+  margin-bottom: 10px;
+}
+.ld-cancelled-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #2c1212;
+  margin-bottom: 10px;
+  line-height: 1.25;
+  font-family: Georgia, "Times New Roman", serif;
+}
+.ld-cancelled-desc {
+  font-size: 13px;
+  color: #7a4a4a;
+  max-width: 320px;
+  margin: 0 auto 4px;
+  line-height: 1.5;
+}
+
 /* Bid placed success banner */
 .ld-bid-placed-banner {
   margin-bottom: 14px;

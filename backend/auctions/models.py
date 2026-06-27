@@ -140,6 +140,24 @@ class Listing(models.Model):
             fields_to_update.append("updated_at")
             self.save(update_fields=fields_to_update)
 
+            # Broadcast auction-end to listing viewers and catalogue
+            try:
+                from asgiref.sync import async_to_sync
+                from channels.layers import get_channel_layer
+                from auctions.consumers import CATALOGUE_GROUP
+                channel_layer = get_channel_layer()
+                if channel_layer:
+                    async_to_sync(channel_layer.group_send)(
+                        f"auction_{self.id}",
+                        {"type": "auction.closed", "data": {"event": "auction_ended", "status": "ended"}},
+                    )
+                    async_to_sync(channel_layer.group_send)(
+                        CATALOGUE_GROUP,
+                        {"type": "catalogue.update", "data": {"event": "catalogue_changed"}},
+                    )
+            except Exception:
+                pass
+
         if winning_bid:
             self.bids.exclude(pk=winning_bid.pk).update(is_winning=False)
             if not winning_bid.is_winning:

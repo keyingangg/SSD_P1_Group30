@@ -653,6 +653,8 @@
   margin-bottom: .15rem;
 }
 .al-item-name { font-size: .85rem; font-weight: 500; color: var(--ink); }
+.al-item-link { text-decoration: none; }
+.al-item-link:hover { color: var(--gold-dark); text-decoration: underline; }
 .al-category { font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; opacity: .6; }
 .al-bid { font-family: var(--font-serif); font-weight: 700; color: var(--gold-dark); }
 .al-date { font-size: .8rem; opacity: .65; white-space: nowrap; }

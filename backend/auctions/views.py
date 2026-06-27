@@ -13,6 +13,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser
 
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from accounts.permissions import IsAdminUser, IsEmailVerified, IsEmailVerifiedSilent
 from core.audit import log_action
 from core.storage import upload_image
@@ -28,6 +30,17 @@ from .serializers import (
 )
 
 _audit_logger = logging.getLogger(__name__)
+
+
+def _broadcast_catalogue_update():
+    """Notify all catalogue WebSocket viewers that the listing set has changed."""
+    from .consumers import CATALOGUE_GROUP
+    channel_layer = get_channel_layer()
+    if channel_layer:
+        async_to_sync(channel_layer.group_send)(
+            CATALOGUE_GROUP,
+            {"type": "catalogue.update", "data": {"event": "catalogue_changed"}},
+        )
 
 
 class BidImmutableMixin:
@@ -161,6 +174,9 @@ class ListingCreateView(APIView):
             status="draft" if save_as_draft else Listing.determine_status(starts_at, ends_at),
         )
 
+        if not save_as_draft:
+            _broadcast_catalogue_update()
+
         return Response({"detail": "Listing created.", "id": listing.id, "image_key": listing.image_key}, status=201)
 
 
@@ -215,6 +231,9 @@ class ListingUpdateView(APIView):
             listing.status = Listing.determine_status(listing.starts_at, listing.ends_at)
 
         listing.save()
+
+        if not save_as_draft:
+            _broadcast_catalogue_update()
 
         return Response({"detail": "Listing updated."}, status=200)
 
@@ -310,6 +329,18 @@ class ListingCancelView(APIView):
                 "total_bidders": len(bidder_emails),
             },
         )
+
+        # Broadcast cancellation to listing viewers and catalogue
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f"auction_{listing.id}",
+                {
+                    "type": "auction.closed",
+                    "data": {"event": "auction_cancelled", "status": "cancelled"},
+                },
+            )
+        _broadcast_catalogue_update()
 
         return Response(
             {
@@ -442,6 +473,25 @@ class BidSubmitView(BidImmutableMixin, APIView):
                 status=500,
             )
         # bid_placed audit log is written inside the atomic block in submit_bid
+
+        # Broadcast to all WebSocket viewers of this listing
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f"auction_{listing.id}",
+                {
+                    "type": "bid.update",
+                    "data": {
+                        "event": "bid_placed",
+                        "anonymous_identifier": bid.anonymous_identifier,
+                        "amount": str(bid.amount),
+                        "submitted_at": bid.submitted_at.isoformat(),
+                        "is_winning": bid.is_winning,
+                        "current_highest_bid": str(listing.current_highest_bid),
+                        "bid_count": listing.bids.count(),
+                    },
+                },
+            )
 
         return Response(
             {
