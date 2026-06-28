@@ -819,9 +819,11 @@ class DeleteAccountView(APIView):
         email = user.email
         ip = get_client_ip(request)
         ua = request.META.get("HTTP_USER_AGENT", "")
-        # Flush the current session properly so Django's session middleware
-        # does not try to save a session that no longer exists after deletion.
+        # Flush the current session and invalidate all other active sessions
+        # before deletion so the session middleware finds nothing to save after
+        # the user row is gone.
         request.session.flush()
+        invalidate_all_user_sessions(user)
         log_action(
             user=user,
             action="account_deleted",

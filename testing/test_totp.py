@@ -119,8 +119,7 @@ def test_mfa_enrol_confirm_no_pending_device_returns_400(auth_client):
 
 @pytest.mark.django_db
 def test_mfa_enrol_confirm_logs_audit_event(auth_client, verified_user):
-    from auditlog.models import LogEntry
-    from django.contrib.contenttypes.models import ContentType
+    from core.models import AuditLog
 
     auth_client.get(MFA_ENROL_URL)
     device = TOTPDevice.objects.get(user=verified_user, confirmed=False)
@@ -128,9 +127,7 @@ def test_mfa_enrol_confirm_logs_audit_event(auth_client, verified_user):
 
     auth_client.post(MFA_ENROL_CONFIRM_URL, {"otp_code": token}, format="json")
 
-    ct = ContentType.objects.get_for_model(verified_user)
-    entries = LogEntry.objects.filter(content_type=ct, object_pk=str(verified_user.pk))
-    assert entries.filter(changes__has_key="mfa_enrolled").exists()
+    assert AuditLog.objects.filter(user=verified_user, action="mfa_enrolled").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -153,15 +150,12 @@ def test_mfa_unenrol_not_enrolled_returns_400(auth_client):
 
 @pytest.mark.django_db
 def test_mfa_unenrol_logs_audit_event(auth_client, verified_user):
-    from auditlog.models import LogEntry
-    from django.contrib.contenttypes.models import ContentType
+    from core.models import AuditLog
 
     _make_device(verified_user)
     auth_client.post(MFA_UNENROL_URL)
 
-    ct = ContentType.objects.get_for_model(verified_user)
-    entries = LogEntry.objects.filter(content_type=ct, object_pk=str(verified_user.pk))
-    assert entries.filter(changes__has_key="mfa_disabled").exists()
+    assert AuditLog.objects.filter(user=verified_user, action="mfa_disabled").exists()
 
 
 @pytest.mark.django_db
