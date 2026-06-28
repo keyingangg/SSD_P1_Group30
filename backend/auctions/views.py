@@ -14,7 +14,7 @@ from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser
 
 from accounts.permissions import IsAdminUser, IsEmailVerified, IsEmailVerifiedSilent
-from core.audit import log_action
+from core.audit import log_action, device_fingerprint as _device_fingerprint
 from core.storage import upload_image
 from .bid_engine import submit_bid
 from .emails import send_auction_cancelled_email
@@ -49,6 +49,7 @@ class BidImmutableMixin:
             resource_id=resource_id,
             ip_address=request.META.get("REMOTE_ADDR"),
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            device_fingerprint=_device_fingerprint(request.META.get("REMOTE_ADDR"), request.META.get("HTTP_USER_AGENT", "")),
             metadata={
                 "method": method,
                 "path": request.path,
@@ -116,6 +117,7 @@ class ListingDetailView(APIView):
                 resource_id=listing.id,
                 ip_address=request.META.get("REMOTE_ADDR"),
                 user_agent=request.META.get("HTTP_USER_AGENT", ""),
+                device_fingerprint=_device_fingerprint(request.META.get("REMOTE_ADDR"), request.META.get("HTTP_USER_AGENT", "")),
                 request_method=request.method,
                 endpoint_path=request.path,
                 metadata={"reason": "listing_not_public", "listing_status": listing.status},
@@ -179,6 +181,7 @@ class ListingCreateView(APIView):
             resource_id=listing.id,
             ip_address=request.META.get("REMOTE_ADDR"),
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            device_fingerprint=_device_fingerprint(request.META.get("REMOTE_ADDR"), request.META.get("HTTP_USER_AGENT", "")),
             request_method=request.method,
             endpoint_path=request.path,
             metadata={"listing_title": listing.title, "save_as_draft": save_as_draft},
@@ -269,6 +272,7 @@ class ListingUpdateView(APIView):
             resource_id=listing.id,
             ip_address=request.META.get("REMOTE_ADDR"),
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            device_fingerprint=_device_fingerprint(request.META.get("REMOTE_ADDR"), request.META.get("HTTP_USER_AGENT", "")),
             role="staff" if request.user.is_staff else "user",
             before=before_snapshot,
             after=after_snapshot,
@@ -317,6 +321,7 @@ class ListingDeleteView(APIView):
             resource_id=listing.id,
             ip_address=request.META.get("REMOTE_ADDR"),
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            device_fingerprint=_device_fingerprint(request.META.get("REMOTE_ADDR"), request.META.get("HTTP_USER_AGENT", "")),
             request_method=request.method,
             endpoint_path=request.path,
             metadata={"listing_title": listing.title},
@@ -376,6 +381,7 @@ class ListingCancelView(APIView):
             resource_id=listing.id,
             ip_address=request.META.get("REMOTE_ADDR"),
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            device_fingerprint=_device_fingerprint(request.META.get("REMOTE_ADDR"), request.META.get("HTTP_USER_AGENT", "")),
             metadata={
                 "listing_title": listing.title,
                 "bidders_notified": notified,
@@ -426,6 +432,7 @@ class BidSubmitView(BidImmutableMixin, APIView):
                 resource_id=listing_id,
                 ip_address=ip,
                 user_agent=ua,
+                device_fingerprint=_device_fingerprint(ip, ua),
                 metadata={
                     "listing_id": str(listing_id),
                     "attempted_amount": str(amount_raw),
@@ -445,6 +452,7 @@ class BidSubmitView(BidImmutableMixin, APIView):
                 resource_id=listing_id,
                 ip_address=ip,
                 user_agent=ua,
+                device_fingerprint=_device_fingerprint(ip, ua),
                 metadata={
                     "listing_id": str(listing_id),
                     "attempted_amount": str(amount_raw),
@@ -461,6 +469,7 @@ class BidSubmitView(BidImmutableMixin, APIView):
                 resource_id=listing_id,
                 ip_address=ip,
                 user_agent=ua,
+                device_fingerprint=_device_fingerprint(ip, ua),
                 metadata={
                     "listing_id": str(listing_id),
                     "attempted_amount": str(amount_raw),
@@ -478,6 +487,7 @@ class BidSubmitView(BidImmutableMixin, APIView):
                 resource_id=listing_id,
                 ip_address=ip,
                 user_agent=ua,
+                device_fingerprint=_device_fingerprint(ip, ua),
                 metadata={
                     "listing_id": str(listing_id),
                     "attempted_amount": str(amount_raw),
@@ -502,6 +512,7 @@ class BidSubmitView(BidImmutableMixin, APIView):
                 resource_id=listing_id,
                 ip_address=ip,
                 user_agent=ua,
+                device_fingerprint=_device_fingerprint(ip, ua),
                 metadata={
                     "listing_id": str(listing_id),
                     "attempted_amount": str(amount_raw),

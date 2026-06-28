@@ -149,24 +149,33 @@ def log_action(
     safe_after = _sanitize_dict(after) if after else None
     safe_metadata = _sanitize_dict(metadata) if metadata else {}
 
+    # Escape all user-influenced string fields once so the same value is used
+    # for both the row-hash payload and the DB write (NFR-06 / NFSR-IN-07).
+    escaped_action = _escape(action or "")
+    escaped_resource_type = _escape(resource_type or "")
+    escaped_user_agent = _escape(user_agent or "")
+    escaped_device_fingerprint = _escape(device_fingerprint or "")
+    escaped_request_method = _escape(request_method or "")
+    escaped_endpoint_path = _escape(endpoint_path or "")
+
     exc_type = type(exception).__name__ if exception else ""
     stack_trace = _format_stack(exception) if exception else ""
 
     payload = {
         "user_id": str(user.id) if getattr(user, "id", None) else None,
-        "action": _escape(action or ""),
-        "resource_type": _escape(resource_type or ""),
+        "action": escaped_action,
+        "resource_type": escaped_resource_type,
         "resource_id": str(resource_id) if resource_id else None,
         "ip_address": ip_address,
-        "user_agent": _escape(user_agent or ""),
-        "device_fingerprint": _escape(device_fingerprint or ""),
+        "user_agent": escaped_user_agent,
+        "device_fingerprint": escaped_device_fingerprint,
         "role": derived_role,
         "before": safe_before,
         "after": safe_after,
         "exception_type": exc_type,
         "stack_trace": stack_trace,
-        "request_method": _escape(request_method or ""),
-        "endpoint_path": _escape(endpoint_path or ""),
+        "request_method": escaped_request_method,
+        "endpoint_path": escaped_endpoint_path,
         "metadata": safe_metadata,
         "timestamp": ts.isoformat(),
     }
@@ -175,19 +184,19 @@ def log_action(
 
     AuditLog.objects.create(
         user=user if getattr(user, "is_authenticated", False) else None,
-        action=action or "",
-        resource_type=resource_type or "",
+        action=escaped_action,
+        resource_type=escaped_resource_type,
         resource_id=resource_id,
         ip_address=ip_address,
-        user_agent=user_agent or "",
+        user_agent=escaped_user_agent,
         role=derived_role,
-        device_fingerprint=device_fingerprint or "",
+        device_fingerprint=escaped_device_fingerprint,
         before_data=safe_before,
         after_data=safe_after,
         exception_type=exc_type,
         stack_trace=stack_trace,
-        request_method=request_method or "",
-        endpoint_path=endpoint_path or "",
+        request_method=escaped_request_method,
+        endpoint_path=escaped_endpoint_path,
         metadata=safe_metadata,
         row_hash=row_hash,
         timestamp=ts,
