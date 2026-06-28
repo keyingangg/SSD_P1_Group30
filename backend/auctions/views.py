@@ -1,8 +1,9 @@
 """API views for the auctions app."""
 import logging
-from datetime import timedelta
 from decimal import Decimal
 
+from django.core.exceptions import PermissionDenied
+from django.db import OperationalError
 from django.db.models import Count, OuterRef, Q, Subquery
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -29,6 +30,46 @@ from .serializers import (
     ListingSerializer,
 )
 
+_audit_logger = logging.getLogger(__name__)
+
+
+class BidImmutableMixin:
+    """Reject and log any DELETE or PATCH attempt on bid endpoints (NFSR-IN-05)."""
+
+    def _reject_bid_mutation(self, request, method, **kwargs):
+        user = request.user
+        resource_id = kwargs.get("listing_id", "unknown")
+        _audit_logger.warning(
+            "Illegal bid mutation attempt: method=%s user=%s path=%s",
+            method,
+            getattr(user, "id", "anonymous"),
+            request.path,
+        )
+        log_action(
+            user=user if getattr(user, "is_authenticated", False) else None,
+            action="bid_mutation_rejected",
+            resource_type="Bid",
+            resource_id=resource_id,
+            ip_address=request.META.get("REMOTE_ADDR"),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            metadata={
+                "method": method,
+                "path": request.path,
+                "user_role": "staff" if getattr(user, "is_staff", False) else "user",
+                "security_event": True,
+            },
+        )
+        return Response(
+            {"detail": "Bid records are immutable and cannot be modified or deleted."},
+            status=405,
+        )
+
+    def delete(self, request, **kwargs):
+        return self._reject_bid_mutation(request, "DELETE", **kwargs)
+
+    def patch(self, request, **kwargs):
+        return self._reject_bid_mutation(request, "PATCH", **kwargs)
+
 logger = logging.getLogger("securebid")
 
 
@@ -42,7 +83,11 @@ class ListingListView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        Listing.finalize_ended_auctions()
+        now = timezone.now()
+        Listing.finalize_ended_auctions(now=now)
+        Listing.objects.filter(
+            status="scheduled", starts_at__lte=now, ends_at__gt=now
+        ).update(status="active")
         queryset = Listing.objects.all().order_by("-starts_at")
         if not request.user.is_staff:
             queryset = queryset.exclude(status__in=["draft", "cancelled"])
@@ -56,7 +101,11 @@ class ListingDetailView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, listing_id):
-        Listing.finalize_ended_auctions()
+        now = timezone.now()
+        Listing.finalize_ended_auctions(now=now)
+        Listing.objects.filter(
+            status="scheduled", starts_at__lte=now, ends_at__gt=now
+        ).update(status="active")
         try:
             listing = Listing.objects.get(pk=listing_id)
         except Listing.DoesNotExist:
@@ -66,7 +115,18 @@ class ListingDetailView(APIView):
             return Response({"detail": "Listing not found."}, status=404)
 
         serializer = ListingSerializer(listing)
-        return Response(serializer.data)
+        data = serializer.data
+
+        if request.user.is_authenticated and not request.user.is_staff:
+            user_top_bid = listing.bids.filter(bidder=request.user).order_by("-amount").first()
+            winning_bid = listing.bids.filter(is_winning=True).first()
+            data = dict(data)
+            data["user_won"] = (
+                winning_bid is not None and winning_bid.bidder_id == request.user.id
+            ) or listing.winner_id == request.user.id
+            data["user_highest_bid"] = str(user_top_bid.amount) if user_top_bid else None
+
+        return Response(data)
 
 
 class ListingCreateView(APIView):
@@ -82,15 +142,13 @@ class ListingCreateView(APIView):
 
         data = serializer.validated_data
         save_as_draft = data.get("save_as_draft", False)
-        now = timezone.now()
 
-        # Normalize image_key: store None when blank to keep DB consistent.
         img_key = data.get("image_key")
         if isinstance(img_key, str) and img_key.strip() == "":
             img_key = None
 
-        starts_at = data.get("starts_at") or now
-        ends_at = data.get("ends_at") or (starts_at + timedelta(days=1))
+        starts_at = data.get("starts_at")
+        ends_at = data.get("ends_at")
         minimum_increment = data.get("minimum_increment") or Decimal("1.00")
 
         listing = Listing.objects.create(
@@ -99,7 +157,7 @@ class ListingCreateView(APIView):
             description=data.get("description", ""),
             image_key=img_key,
             category=data.get("category", "Others"),
-            starting_price=data["starting_price"],
+            starting_price=data.get("starting_price") or Decimal("0.00"),
             minimum_increment=minimum_increment,
             starts_at=starts_at,
             ends_at=ends_at,
@@ -126,16 +184,14 @@ class ListingUpdateView(APIView):
         except Listing.DoesNotExist:
             return Response({"detail": "Listing not found."}, status=404)
 
-        # SFR-06c: prevent modification of a listing that has received bids
-        # unless the auction has already been cancelled.
+        if listing.status == "active":
+            return Response(
+                {"detail": "This listing cannot be modified while the auction is live. Cancel it first."},
+                status=409,
+            )
         if listing.bids.exists() and listing.status != "cancelled":
             return Response(
-                {
-                    "detail": (
-                        "This listing cannot be modified because bids have already been placed. "
-                        "Cancel the auction first, then make changes."
-                    )
-                },
+                {"detail": "This listing cannot be modified because bids have already been placed. Cancel the auction first, then make changes."},
                 status=409,
             )
 
@@ -144,14 +200,15 @@ class ListingUpdateView(APIView):
 
         data = serializer.validated_data
         save_as_draft = data.get("save_as_draft", False)
+
         listing.title = data["title"]
-        listing.description = data["description"]
+        listing.description = data.get("description", listing.description)
         listing.category = data.get("category", listing.category)
         listing.image_key = data.get("image_key", listing.image_key)
-        listing.starting_price = data["starting_price"]
-        listing.minimum_increment = data["minimum_increment"]
-        listing.starts_at = data["starts_at"]
-        listing.ends_at = data["ends_at"]
+        listing.starting_price = data.get("starting_price") or listing.starting_price or Decimal("0.00")
+        listing.minimum_increment = data.get("minimum_increment", listing.minimum_increment)
+        listing.starts_at = data.get("starts_at", listing.starts_at)
+        listing.ends_at = data.get("ends_at", listing.ends_at)
 
         if listing.status == "cancelled":
             pass
@@ -270,7 +327,7 @@ class ListingCancelView(APIView):
     ratelimit(key="user_or_ip", rate="30/m", method="POST", block=True),
     name="post",
 )
-class BidSubmitView(APIView):
+class BidSubmitView(BidImmutableMixin, APIView):
     """Submit a bid on an active auction (authenticated + verified)."""
 
     permission_classes = [IsEmailVerified]
@@ -279,16 +336,115 @@ class BidSubmitView(APIView):
         serializer = BidSubmitSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        ip = request.META.get("REMOTE_ADDR")
+        ua = request.META.get("HTTP_USER_AGENT", "")
+        amount_raw = serializer.validated_data["amount"]
+
         try:
             bid, listing = submit_bid(
                 listing_id=listing_id,
                 user=request.user,
-                amount=serializer.validated_data["amount"],
+                amount=amount_raw,
+                ip_address=ip,
+                user_agent=ua,
+            )
+        except OperationalError:
+            # Row-level lock could not be acquired — concurrent bid in progress
+            log_action(
+                user=request.user,
+                action="bid_rejected",
+                resource_type="Listing",
+                resource_id=listing_id,
+                ip_address=ip,
+                user_agent=ua,
+                metadata={
+                    "listing_id": str(listing_id),
+                    "attempted_amount": str(amount_raw),
+                    "reason": "lock_contention",
+                    "user_role": "staff" if getattr(request.user, "is_staff", False) else "user",
+                },
+            )
+            return Response(
+                {"detail": "Another bid is being processed. Please try again."},
+                status=409,
             )
         except LookupError:
+            log_action(
+                user=request.user,
+                action="bid_rejected",
+                resource_type="Listing",
+                resource_id=listing_id,
+                ip_address=ip,
+                user_agent=ua,
+                metadata={
+                    "listing_id": str(listing_id),
+                    "attempted_amount": str(amount_raw),
+                    "reason": "listing_not_found",
+                    "user_role": "staff" if getattr(request.user, "is_staff", False) else "user",
+                },
+            )
             return Response({"detail": "Listing not found."}, status=404)
-        except ValueError as exc:
+        except PermissionDenied as exc:
+            log_action(
+                user=request.user,
+                action="bid_forbidden",
+                resource_type="Listing",
+                resource_id=listing_id,
+                ip_address=ip,
+                user_agent=ua,
+                metadata={
+                    "listing_id": str(listing_id),
+                    "attempted_amount": str(amount_raw),
+                    "reason": str(exc),
+                    "user_role": "staff" if getattr(request.user, "is_staff", False) else "user",
+                    "security_event": True,
+                },
+            )
             return Response({"detail": str(exc)}, status=400)
+        except ValueError as exc:
+            log_action(
+                user=request.user,
+                action="bid_rejected",
+                resource_type="Listing",
+                resource_id=listing_id,
+                ip_address=ip,
+                user_agent=ua,
+                metadata={
+                    "listing_id": str(listing_id),
+                    "attempted_amount": str(amount_raw),
+                    "reason": str(exc),
+                    "user_role": "staff" if getattr(request.user, "is_staff", False) else "user",
+                },
+            )
+            return Response({"detail": str(exc)}, status=400)
+        except Exception:
+            # Fail-closed: any unhandled exception rolls back the transaction.
+            # Log full detail server-side; return generic message to client (NFSR-AV-04).
+            logger = logging.getLogger(__name__)
+            logger.exception(
+                "Unhandled exception during bid submission for listing %s by user %s",
+                listing_id,
+                getattr(request.user, "id", "unknown"),
+            )
+            log_action(
+                user=request.user,
+                action="bid_error",
+                resource_type="Listing",
+                resource_id=listing_id,
+                ip_address=ip,
+                user_agent=ua,
+                metadata={
+                    "listing_id": str(listing_id),
+                    "attempted_amount": str(amount_raw),
+                    "user_role": "staff" if getattr(request.user, "is_staff", False) else "user",
+                    "security_event": True,
+                },
+            )
+            return Response(
+                {"detail": "An unexpected error occurred. Your bid was not placed."},
+                status=500,
+            )
+        # bid_placed audit log is written inside the atomic block in submit_bid
 
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
@@ -317,7 +473,29 @@ class BidSubmitView(APIView):
         )
 
 
-class UserBidHistoryView(APIView):
+class ListingBidsView(BidImmutableMixin, APIView):
+    """Return all bids for a listing, newest first. Public read."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request, listing_id):
+        try:
+            listing = Listing.objects.get(pk=listing_id)
+        except Listing.DoesNotExist:
+            return Response({"detail": "Listing not found."}, status=404)
+
+        if not request.user.is_staff and listing.status in {"draft", "cancelled"}:
+            return Response({"detail": "Listing not found."}, status=404)
+
+        bids = (
+            Bid.objects.filter(listing=listing)
+            .order_by("-submitted_at", "-id")
+            .values("id", "anonymous_identifier", "amount", "submitted_at", "is_winning")
+        )
+        return Response(list(bids))
+
+
+class UserBidHistoryView(BidImmutableMixin, APIView):
     """List the authenticated user's own bid history."""
 
     permission_classes = [IsEmailVerifiedSilent]

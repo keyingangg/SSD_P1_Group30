@@ -14,10 +14,12 @@ import AcceptInvite from "./pages/AcceptInvite.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import AccountSettings from "./pages/AccountSettings.jsx";
 import Checkout from "./pages/Checkout.jsx";
+import OrderDetail from "./pages/OrderDetail.jsx";
 import AdminOverview from "./pages/admin/AdminOverview.jsx";
 import AdminListings from "./pages/admin/AdminListings.jsx";
 import AdminCreate from "./pages/admin/AdminCreate.jsx";
 import AdminUsers from "./pages/admin/AdminUsers.jsx";
+import AdminOrders from "./pages/admin/AdminOrders.jsx";
 import NotFound from "./pages/NotFound.jsx";
 
 export default function App() {
@@ -66,6 +68,14 @@ export default function App() {
           }
         />
         <Route
+          path="/orders/:orderId"
+          element={
+            <ProtectedRoute>
+              <OrderDetail />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/admin/overview"
           element={
             <ProtectedRoute requireAdmin>
@@ -94,6 +104,14 @@ export default function App() {
           element={
             <ProtectedRoute requireAdmin>
               <AdminUsers />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/orders"
+          element={
+            <ProtectedRoute requireAdmin>
+              <AdminOrders />
             </ProtectedRoute>
           }
         />

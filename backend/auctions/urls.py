@@ -38,6 +38,11 @@ urlpatterns = [
         name="bid-submit",
     ),
     path(
+        "<uuid:listing_id>/bids/",
+        views.ListingBidsView.as_view(),
+        name="listing-bids",
+    ),
+    path(
         "<uuid:listing_id>/cancel/",
         views.ListingCancelView.as_view(),
         name="listing-cancel",

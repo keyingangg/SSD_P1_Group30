@@ -9,6 +9,7 @@ import time
 from collections import defaultdict
 
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from channels.generic.websocket import AsyncJsonWebsocketConsumer
 
 logger = logging.getLogger("securebid")
 
@@ -19,8 +20,20 @@ WS_CLOSE_EMAIL_UNVERIFIED = 4003
 WS_CLOSE_ORIGIN_REJECTED = 4004
 WS_CLOSE_RATE_LIMITED = 4029
 
+# Close codes (4000-4999 range is available for application use).
+WS_CLOSE_UNAUTHENTICATED = 4001
+WS_CLOSE_READ_ONLY = 4002
+WS_CLOSE_EMAIL_UNVERIFIED = 4003
+WS_CLOSE_ORIGIN_REJECTED = 4004
+WS_CLOSE_RATE_LIMITED = 4029
 
-class BidConsumer(AsyncJsonWebsocketConsumer):
+
+def _group_name(listing_id: str) -> str:
+    """Stable channel group name for a listing."""
+    return f"auction_{listing_id}"
+
+
+class BidConsumer(AsyncJsonJsonWebsocketConsumer):
     """Broadcasts anonymised live bid updates to viewers of an auction.
 
     This consumer is read-only — clients cannot send messages. Bids are
@@ -65,10 +78,10 @@ class BidConsumer(AsyncJsonWebsocketConsumer):
             await self.close(code=WS_CLOSE_EMAIL_UNVERIFIED)
             return
 
-        # --- Scope channel to this auction (SFR-08c) ---
         self.listing_id = str(self.scope["url_route"]["kwargs"]["listing_id"])
-        self.group_name = f"auction_{self.listing_id}"
-        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        self.group = _group_name(self.listing_id)
+
+        await self.channel_layer.group_add(self.group, self.channel_name)
         await self.accept()
 
     async def disconnect(self, close_code):
@@ -80,5 +93,5 @@ class BidConsumer(AsyncJsonWebsocketConsumer):
         await self.close(code=WS_CLOSE_READ_ONLY)
 
     async def bid_update(self, event):
-        """Forward a bid update from the channel layer to the WebSocket client."""
+        """Relay a group message to this WebSocket client."""
         await self.send_json(event["data"])

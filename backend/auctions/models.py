@@ -50,8 +50,8 @@ class Listing(models.Model):
         max_digits=12, decimal_places=2, default=0
     )
     minimum_increment = models.DecimalField(max_digits=12, decimal_places=2)
-    starts_at = models.DateTimeField()
-    ends_at = models.DateTimeField()
+    starts_at = models.DateTimeField(null=True, blank=True)
+    ends_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default="draft"
     )
@@ -145,6 +145,21 @@ class Listing(models.Model):
             if not winning_bid.is_winning:
                 winning_bid.is_winning = True
                 winning_bid.save(update_fields=["is_winning"])
+
+            # Create the fulfilment Order for the winner exactly once. Keyed on
+            # the winning bid (OneToOne) so repeated finalize calls — this runs
+            # on many GET requests — never create duplicate orders (FR-03).
+            # Imported here to avoid a circular import (payments imports Bid).
+            from payments.models import Order
+
+            Order.objects.get_or_create(
+                winning_bid=winning_bid,
+                defaults={
+                    "winner_id": winner_id,
+                    "delivery_address_snapshot": "",
+                    "fulfillment_status": "pending_payment",
+                },
+            )
 
         return bool(fields_to_update)
 

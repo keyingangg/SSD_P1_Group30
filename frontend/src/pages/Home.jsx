@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { getListings } from "../api/auctions.js";
 import AuctionCard from "../components/AuctionCard.jsx";
 
@@ -36,31 +37,31 @@ const ESTIMATE_RANGES = [
 
 const SIDEBAR_GROUPS = {
   STATUS: {
-    options: ["Live Now", "Scheduled", "Ended"],
-    activeDefault: null,
+    options: ["All", "Live Now", "Scheduled", "Ended"],
   },
   CATEGORY: {
-    options: DB_CATEGORIES,
-    activeDefault: null,
+    options: ["All", ...DB_CATEGORIES],
   },
   ESTIMATE: {
-    options: ESTIMATE_RANGES.map((r) => r.label),
-    activeDefault: null,
+    options: ["All", ...ESTIMATE_RANGES.map((r) => r.label)],
   },
 };
 
 const ITEMS_PER_PAGE = 9;
 
 export default function Home() {
+  const [searchParams] = useSearchParams();
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState("All Lots");
   const [page, setPage] = useState(1);
-  const [sideFilters, setSideFilters] = useState({
-    STATUS: null,
-    CATEGORY: null,
-    ESTIMATE: null,
+  const [sideFilters, setSideFilters] = useState(() => {
+    const cat = searchParams.get("category");
+    return {
+      STATUS: null,
+      CATEGORY: cat && DB_CATEGORIES.includes(cat) ? cat : null,
+      ESTIMATE: null,
+    };
   });
 
   useEffect(() => {
@@ -69,8 +70,6 @@ export default function Home() {
 
   const visible = listings.filter((l) => {
     if (search && !l.title.toLowerCase().includes(search.toLowerCase())) return false;
-
-    if (activeTab !== "All Lots" && l.category !== activeTab) return false;
 
     if (sideFilters.STATUS) {
       const statusMap = { "Live Now": "active", "Scheduled": "scheduled", "Ended": "ended" };
@@ -115,36 +114,26 @@ export default function Home() {
       {/* Filter Strip */}
       <div className="cat-filter-strip">
         <div className="cat-filter-inner">
-          <div className="cat-search-wrap">
-            <svg className="cat-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <circle cx="6.5" cy="6.5" r="5" stroke="#1E1E1E" strokeWidth="1.5" />
-              <path d="M10.5 10.5L14 14" stroke="#1E1E1E" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-            <input
-              className="cat-search"
-              placeholder="Search by brand, item, lot number..."
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            />
+          <div className="cat-filter-row1">
+            <div className="cat-search-wrap">
+              <svg className="cat-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <circle cx="6.5" cy="6.5" r="5" stroke="#1E1E1E" strokeWidth="1.5" />
+                <path d="M10.5 10.5L14 14" stroke="#1E1E1E" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+              <input
+                className="cat-search"
+                placeholder="Search by brand, item, lot number..."
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              />
+            </div>
+            <select className="cat-sort">
+              <option>Ending soonest</option>
+              <option>Highest bid</option>
+              <option>Lowest estimate</option>
+              <option>Most bids</option>
+            </select>
           </div>
-          <div className="cat-tabs">
-            {FILTER_TABS.map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                className={`cat-tab${activeTab === tab ? " active" : ""}`}
-                onClick={() => { setActiveTab(tab); setPage(1); }}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-          <select className="cat-sort">
-            <option>Ending soonest ▾</option>
-            <option>Highest bid</option>
-            <option>Lowest estimate</option>
-            <option>Most bids</option>
-          </select>
         </div>
       </div>
 
@@ -160,13 +149,13 @@ export default function Home() {
               <p className="cat-sb-group-label">{group}</p>
               <div className="cat-sb-rule" />
               {options.map((opt) => {
-                const isActive = sideFilters[group] === opt;
+                const isActive = opt === "All" ? sideFilters[group] === null : sideFilters[group] === opt;
                 return (
                   <button
                     key={opt}
                     type="button"
                     className={`cat-sb-opt${isActive ? " active" : ""}`}
-                    onClick={() => { setSideFilters((f) => ({ ...f, [group]: isActive ? null : opt })); setPage(1); }}
+                    onClick={() => { setSideFilters((f) => ({ ...f, [group]: (isActive || opt === "All") ? null : opt })); setPage(1); }}
                   >
                     <span className="cat-sb-radio">{isActive ? "●" : "○"}</span>
                     {opt}

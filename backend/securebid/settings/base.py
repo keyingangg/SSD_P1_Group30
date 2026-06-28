@@ -257,6 +257,18 @@ DEFAULT_FROM_EMAIL = os.environ.get(
 )
 
 # --------------------------------------------------------------------------
+# Stripe (test/sandbox mode — no real money moves with pk_test/sk_test keys)
+# --------------------------------------------------------------------------
+# The secret key (sk_test_...) is backend-only and must never be exposed to the
+# client. The publishable key (pk_test_...) is sent to the browser to render
+# Stripe Elements. The webhook secret (whsec_...) verifies the HMAC-SHA256
+# signature on incoming webhook events before any DB write (FR-03 · FR-10).
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
+STRIPE_PUBLISHABLE_KEY = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+STRIPE_CURRENCY = os.environ.get("STRIPE_CURRENCY", "sgd")
+
+# --------------------------------------------------------------------------
 # Internationalization
 # --------------------------------------------------------------------------
 LANGUAGE_CODE = "en-us"

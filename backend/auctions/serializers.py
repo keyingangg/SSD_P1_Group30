@@ -15,11 +15,6 @@ _VALID_CATEGORIES = [choice[0] for choice in Listing.CATEGORY_CHOICES]
 
 
 def _image_signed_url(image_key):
-    """Convert a stored object key into a short-lived signed URL for clients.
-
-    Images must only ever be served via signed URLs, never the raw object
-    key or a public bucket URL (NFSR-C-07 / SFR-11e).
-    """
     if not image_key:
         return None
     try:
@@ -51,9 +46,17 @@ class ListingSerializer(serializers.ModelSerializer):
     """
 
     image_url = serializers.SerializerMethodField()
+    display_status = serializers.SerializerMethodField()
+    bid_count = serializers.SerializerMethodField()
 
     def get_image_url(self, obj):
         return _image_signed_url(obj.image_key)
+
+    def get_display_status(self, obj):
+        return obj.get_display_status()
+
+    def get_bid_count(self, obj):
+        return obj.bids.count()
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -76,6 +79,8 @@ class ListingSerializer(serializers.ModelSerializer):
             "starts_at",
             "ends_at",
             "status",
+            "display_status",
+            "bid_count",
             "current_highest_bid",
             "created_at",
             "updated_at",
@@ -151,6 +156,8 @@ class ListingCreateSerializer(serializers.Serializer):
         decimal_places=2,
         min_value=Decimal("0.01"),
         max_value=Decimal("9999999999.99"),
+        required=False,
+        allow_null=True,
     )
     minimum_increment = serializers.DecimalField(
         max_digits=12,
@@ -159,8 +166,8 @@ class ListingCreateSerializer(serializers.Serializer):
         max_value=Decimal("9999999999.99"),
         required=False,
     )
-    starts_at = serializers.DateTimeField(required=False)
-    ends_at = serializers.DateTimeField(required=False)
+    starts_at = serializers.DateTimeField(required=False, allow_null=True)
+    ends_at = serializers.DateTimeField(required=False, allow_null=True)
     save_as_draft = serializers.BooleanField(required=False, default=False)
 
     def validate_title(self, value):
@@ -185,7 +192,7 @@ class ListingCreateSerializer(serializers.Serializer):
         if save_as_draft:
             return data
 
-        required_fields = ["description", "minimum_increment", "starts_at", "ends_at"]
+        required_fields = ["starting_price", "description", "minimum_increment", "starts_at", "ends_at"]
         missing = [field for field in required_fields if field not in data or data[field] is None]
         if missing:
             raise serializers.ValidationError(

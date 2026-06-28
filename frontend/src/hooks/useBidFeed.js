@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { useWebSocket } from "./useWebSocket.js";
+import { getListingBids } from "../api/auctions.js";
 
 const POLL_INTERVAL_MS = 5000;
 

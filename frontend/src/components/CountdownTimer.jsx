@@ -18,7 +18,8 @@ function formatRemaining(ms) {
 }
 
 // Displays countdown only while auction is live (between start and end).
-export default function CountdownTimer({ startsAt, endsAt, preStartDisplay = "scheduled" }) {
+// Pass segmented={true} to render structured d/h/m/s segments instead of plain text.
+export default function CountdownTimer({ startsAt, endsAt, preStartDisplay = "scheduled", segmented = false }) {
   const startMs = useMemo(() => {
     const parsed = startsAt ? new Date(startsAt).getTime() : NaN;
     return Number.isNaN(parsed) ? null : parsed;
@@ -70,20 +71,76 @@ export default function CountdownTimer({ startsAt, endsAt, preStartDisplay = "sc
   }, [startMs, endMs, isBeforeStart]);
 
   if (!endMs) {
+    if (segmented) return <SegmentedCountdown days={0} hours={0} minutes={0} seconds={0} label="-" />;
     return <span className="countdown">-</span>;
   }
 
   if (startMs && now < startMs) {
     if (preStartDisplay === "countdown") {
+      if (segmented) {
+        return <SegmentedCountdown {...msToSegs(startMs - now)} />;
+      }
       return <span className="countdown">Opening in {formatDuration(startMs - now)}</span>;
     }
+    if (segmented) return <SegmentedCountdown days={0} hours={0} minutes={0} seconds={0} label="Scheduled" />;
     return <span className="countdown">Scheduled</span>;
   }
 
   if (now >= endMs) {
+    if (segmented) return <SegmentedCountdown days={0} hours={0} minutes={0} seconds={0} label="Ended" />;
     return <span className="countdown">Ended</span>;
   }
 
   const remaining = endMs - now;
+  if (segmented) return <SegmentedCountdown {...msToSegs(remaining)} />;
   return <span className="countdown">Ends in {formatRemaining(remaining)}</span>;
+}
+
+function msToSegs(ms) {
+  const totalSeconds = Math.floor(Math.max(ms, 0) / 1000);
+  return {
+    days: Math.floor(totalSeconds / 86400),
+    hours: Math.floor((totalSeconds % 86400) / 3600),
+    minutes: Math.floor((totalSeconds % 3600) / 60),
+    seconds: totalSeconds % 60,
+  };
+}
+
+function pad(n) { return String(n).padStart(2, "0"); }
+
+function SegmentedCountdown({ days, hours, minutes, seconds, label }) {
+  if (label) {
+    return (
+      <div className="ld-countdown-segs">
+        <span className="ld-seg-num" style={{ fontSize: 18 }}>{label}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="ld-countdown-segs">
+      {days > 0 && (
+        <>
+          <div className="ld-seg">
+            <span className="ld-seg-num">{pad(days)}</span>
+            <span className="ld-seg-unit">d</span>
+          </div>
+          <span className="ld-seg-colon">:</span>
+        </>
+      )}
+      <div className="ld-seg">
+        <span className="ld-seg-num">{pad(hours)}</span>
+        <span className="ld-seg-unit">h</span>
+      </div>
+      <span className="ld-seg-colon">:</span>
+      <div className="ld-seg">
+        <span className="ld-seg-num">{pad(minutes)}</span>
+        <span className="ld-seg-unit">m</span>
+      </div>
+      <span className="ld-seg-colon">:</span>
+      <div className="ld-seg">
+        <span className="ld-seg-num">{pad(seconds)}</span>
+        <span className="ld-seg-unit">s</span>
+      </div>
+    </div>
+  );
 }
