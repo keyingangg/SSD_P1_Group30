@@ -20,6 +20,7 @@ class OriginValidationMiddleware:
             allowed = getattr(settings, "CORS_ALLOWED_ORIGINS", [])
             if not origin or origin not in allowed:
                 logger.warning("WebSocket origin rejected: %s", origin)
+                await send({"type": "websocket.accept"})
                 await send({"type": "websocket.close", "code": 4004})
                 return
         await self.app(scope, receive, send)

@@ -9,16 +9,8 @@ import time
 from collections import defaultdict
 
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
-from channels.generic.websocket import AsyncJsonWebsocketConsumer
 
 logger = logging.getLogger("securebid")
-
-# Close codes (4000-4999 range is available for application use).
-WS_CLOSE_UNAUTHENTICATED = 4001
-WS_CLOSE_READ_ONLY = 4002
-WS_CLOSE_EMAIL_UNVERIFIED = 4003
-WS_CLOSE_ORIGIN_REJECTED = 4004
-WS_CLOSE_RATE_LIMITED = 4029
 
 # Close codes (4000-4999 range is available for application use).
 WS_CLOSE_UNAUTHENTICATED = 4001
@@ -33,7 +25,7 @@ def _group_name(listing_id: str) -> str:
     return f"auction_{listing_id}"
 
 
-class BidConsumer(AsyncJsonJsonWebsocketConsumer):
+class BidConsumer(AsyncJsonWebsocketConsumer):
     """Broadcasts anonymised live bid updates to viewers of an auction.
 
     This consumer is read-only — clients cannot send messages. Bids are
@@ -58,6 +50,7 @@ class BidConsumer(AsyncJsonJsonWebsocketConsumer):
         self._connect_log[rate_key] = [t for t in log if now - t < self.WINDOW_SECONDS]
         if len(self._connect_log[rate_key]) >= self.MAX_CONNECTS:
             logger.warning("WebSocket rate limited key=%s", rate_key)
+            await self.accept()
             await self.close(code=WS_CLOSE_RATE_LIMITED)
             return
         self._connect_log[rate_key].append(now)
@@ -68,6 +61,7 @@ class BidConsumer(AsyncJsonJsonWebsocketConsumer):
                 "WebSocket connect denied: unauthenticated scope=%s path=%s",
                 user, self.scope.get("path"),
             )
+            await self.accept()
             await self.close(code=WS_CLOSE_UNAUTHENTICATED)
             return
 
@@ -75,6 +69,7 @@ class BidConsumer(AsyncJsonJsonWebsocketConsumer):
             logger.warning(
                 "WebSocket connect denied: email unverified user=%s", user.pk,
             )
+            await self.accept()
             await self.close(code=WS_CLOSE_EMAIL_UNVERIFIED)
             return
 
@@ -85,8 +80,8 @@ class BidConsumer(AsyncJsonJsonWebsocketConsumer):
         await self.accept()
 
     async def disconnect(self, close_code):
-        if hasattr(self, "group_name"):
-            await self.channel_layer.group_discard(self.group_name, self.channel_name)
+        if hasattr(self, "group"):
+            await self.channel_layer.group_discard(self.group, self.channel_name)
 
     async def receive_json(self, content, **kwargs):
         # WebSocket is broadcast-only; reject any client-sent messages (SFR-08b).
