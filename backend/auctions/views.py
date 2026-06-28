@@ -13,6 +13,9 @@ from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser
 
 from accounts.permissions import IsAdminUser, IsEmailVerified, IsEmailVerifiedSilent
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+
 from core.audit import log_action
 from core.storage import upload_image
 from .bid_engine import submit_bid
@@ -286,6 +289,20 @@ class BidSubmitView(APIView):
             return Response({"detail": "Listing not found."}, status=404)
         except ValueError as exc:
             return Response({"detail": str(exc)}, status=400)
+
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"auction_{listing_id}",
+            {
+                "type": "bid_update",
+                "data": {
+                    "listing_id": str(listing.id),
+                    "current_highest_bid": str(listing.current_highest_bid),
+                    "anonymous_identifier": bid.anonymous_identifier,
+                    "submitted_at": bid.submitted_at.isoformat(),
+                },
+            },
+        )
 
         return Response(
             {

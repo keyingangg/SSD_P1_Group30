@@ -176,10 +176,14 @@ REST_FRAMEWORK = {
 }
 
 # --------------------------------------------------------------------------
-# Channels (real-time bidding)
+# Channels (real-time bidding) — NFSR-AV-06
 # --------------------------------------------------------------------------
-# InMemoryChannelLayer is suitable for single-process development/deployment.
-# Use a Redis channel layer for multi-worker production scale.
+# InMemoryChannelLayer is suitable for the current single-process Daphne
+# deployment on EC2. It keeps all channel state in the Daphne process and
+# requires no external broker. For multi-worker deployments (e.g. multiple
+# Daphne/uvicorn workers behind a load balancer), switch to:
+#   "BACKEND": "channels_redis.core.RedisChannelLayer",
+#   "CONFIG": {"hosts": [os.environ.get("REDIS_URL", "redis://localhost:6379")]},
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels.layers.InMemoryChannelLayer",
