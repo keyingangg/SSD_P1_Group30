@@ -109,6 +109,17 @@ class ListingDetailView(APIView):
             return Response({"detail": "Listing not found."}, status=404)
 
         if not request.user.is_staff and listing.status in {"draft", "cancelled"}:
+            log_action(
+                user=request.user if getattr(request.user, "is_authenticated", False) else None,
+                action="listing_access_denied",
+                resource_type="Listing",
+                resource_id=listing.id,
+                ip_address=request.META.get("REMOTE_ADDR"),
+                user_agent=request.META.get("HTTP_USER_AGENT", ""),
+                request_method=request.method,
+                endpoint_path=request.path,
+                metadata={"reason": "listing_not_public", "listing_status": listing.status},
+            )
             return Response({"detail": "Listing not found."}, status=404)
 
         serializer = ListingSerializer(listing)
@@ -161,6 +172,18 @@ class ListingCreateView(APIView):
             status="draft" if save_as_draft else Listing.determine_status(starts_at, ends_at),
         )
 
+        log_action(
+            user=request.user,
+            action="listing_created",
+            resource_type="Listing",
+            resource_id=listing.id,
+            ip_address=request.META.get("REMOTE_ADDR"),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            request_method=request.method,
+            endpoint_path=request.path,
+            metadata={"listing_title": listing.title, "save_as_draft": save_as_draft},
+        )
+
         return Response({"detail": "Listing created.", "id": listing.id, "image_key": listing.image_key}, status=201)
 
 
@@ -198,6 +221,18 @@ class ListingUpdateView(APIView):
         data = serializer.validated_data
         save_as_draft = data.get("save_as_draft", False)
 
+        # Capture state before modification for the audit trail (NFSR-AC-03).
+        before_snapshot = {
+            "title": listing.title,
+            "description": listing.description,
+            "category": listing.category,
+            "starting_price": str(listing.starting_price),
+            "minimum_increment": str(listing.minimum_increment),
+            "starts_at": listing.starts_at.isoformat() if listing.starts_at else None,
+            "ends_at": listing.ends_at.isoformat() if listing.ends_at else None,
+            "status": listing.status,
+        }
+
         listing.title = data["title"]
         listing.description = data.get("description", listing.description)
         listing.category = data.get("category", listing.category)
@@ -215,6 +250,32 @@ class ListingUpdateView(APIView):
             listing.status = Listing.determine_status(listing.starts_at, listing.ends_at)
 
         listing.save()
+
+        after_snapshot = {
+            "title": listing.title,
+            "description": listing.description,
+            "category": listing.category,
+            "starting_price": str(listing.starting_price),
+            "minimum_increment": str(listing.minimum_increment),
+            "starts_at": listing.starts_at.isoformat() if listing.starts_at else None,
+            "ends_at": listing.ends_at.isoformat() if listing.ends_at else None,
+            "status": listing.status,
+        }
+
+        log_action(
+            user=request.user,
+            action="listing_updated",
+            resource_type="Listing",
+            resource_id=listing.id,
+            ip_address=request.META.get("REMOTE_ADDR"),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            role="staff" if request.user.is_staff else "user",
+            before=before_snapshot,
+            after=after_snapshot,
+            request_method=request.method,
+            endpoint_path=request.path,
+            metadata={"save_as_draft": save_as_draft},
+        )
 
         return Response({"detail": "Listing updated."}, status=200)
 
@@ -249,6 +310,17 @@ class ListingDeleteView(APIView):
                 status=409,
             )
 
+        log_action(
+            user=request.user,
+            action="listing_deleted",
+            resource_type="Listing",
+            resource_id=listing.id,
+            ip_address=request.META.get("REMOTE_ADDR"),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            request_method=request.method,
+            endpoint_path=request.path,
+            metadata={"listing_title": listing.title},
+        )
         listing.delete()
         return Response(status=204)
 

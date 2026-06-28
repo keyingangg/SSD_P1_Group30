@@ -6,14 +6,12 @@ import smtplib
 import time
 
 import qrcode
-from auditlog.models import LogEntry
 from axes.utils import reset
 from django.contrib.auth import authenticate
 from django.contrib.auth import get_user_model
 from django.contrib.auth import login as django_login
 from django.contrib.auth import logout as django_logout
 from django.contrib.auth.signals import user_login_failed
-from django.contrib.contenttypes.models import ContentType
 from django.contrib.sessions.models import Session
 from django.core.exceptions import PermissionDenied
 from django.core.mail import BadHeaderError
@@ -27,6 +25,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.permissions import IsAdminUser, IsEmailVerified
+from core.audit import log_action, device_fingerprint as _device_fingerprint
 
 logger = logging.getLogger("securebid")
 
@@ -67,15 +66,20 @@ User = get_user_model()
 
 
 def _log_mfa_event(user, action_name, request):
-    """Write an audit log entry for MFA enrolment/disablement (NFSR-AC-02)."""
-    LogEntry.objects.create(
-        content_type=ContentType.objects.get_for_model(user),
-        object_pk=str(user.pk),
-        object_repr=str(user),
-        action=LogEntry.Action.UPDATE,
-        changes={action_name: [None, True]},
-        actor=user,
-        remote_addr=get_client_ip(request),
+    """Write a structured audit log entry for MFA enrolment/disablement (NFSR-AC-02)."""
+    ip = get_client_ip(request)
+    ua = request.META.get("HTTP_USER_AGENT", "") if request else ""
+    log_action(
+        user=user,
+        action=action_name,
+        resource_type="User",
+        resource_id=user.id,
+        ip_address=ip,
+        user_agent=ua,
+        device_fingerprint=_device_fingerprint(ip, ua),
+        role="staff" if getattr(user, "is_staff", False) else "user",
+        request_method=getattr(request, "method", ""),
+        endpoint_path=getattr(request, "path", ""),
     )
 
 
@@ -183,6 +187,9 @@ class RegisterView(APIView):
         email = serializer.validated_data["email"]
         password = serializer.validated_data["password"]
 
+        ip = get_client_ip(request)
+        ua = request.META.get("HTTP_USER_AGENT", "")
+
         existing = User.objects.filter(email=email).first()
         try:
             if existing is None:
@@ -198,10 +205,36 @@ class RegisterView(APIView):
                 )
                 raw_token = generate_email_verification_token(user)
                 send_verification_email(user, raw_token)
+                log_action(
+                    user=user,
+                    action="user_registered",
+                    resource_type="User",
+                    resource_id=user.id,
+                    ip_address=ip,
+                    user_agent=ua,
+                    device_fingerprint=_device_fingerprint(ip, ua),
+                    role="user",
+                    request_method=request.method,
+                    endpoint_path=request.path,
+                    metadata={"email": email},
+                )
             elif not existing.is_email_verified:
                 # Account exists but never verified: resend the link.
                 raw_token = generate_email_verification_token(existing)
                 send_verification_email(existing, raw_token)
+                log_action(
+                    user=existing,
+                    action="user_registration_resend",
+                    resource_type="User",
+                    resource_id=existing.id,
+                    ip_address=ip,
+                    user_agent=ua,
+                    device_fingerprint=_device_fingerprint(ip, ua),
+                    role="user",
+                    request_method=request.method,
+                    endpoint_path=request.path,
+                    metadata={"email": email},
+                )
             # Verified account already exists: respond identically, do nothing.
         except (BadHeaderError, OSError) as exc:
             logger.error("Failed to send verification email to %s: %s", email, exc)
@@ -237,6 +270,22 @@ class VerifyEmailView(APIView):
         user.is_active = True
         user.save(update_fields=["is_email_verified", "is_active"])
 
+        ip = get_client_ip(request)
+        ua = request.META.get("HTTP_USER_AGENT", "")
+        log_action(
+            user=user,
+            action="email_verified",
+            resource_type="User",
+            resource_id=user.id,
+            ip_address=ip,
+            user_agent=ua,
+            device_fingerprint=_device_fingerprint(ip, ua),
+            role="user",
+            request_method=request.method,
+            endpoint_path=request.path,
+            metadata={"email": user.email},
+        )
+
         record.is_used = True
         record.save(update_fields=["is_used"])
 
@@ -263,6 +312,9 @@ class LoginView(APIView):
         email = serializer.validated_data["email"]
         password = serializer.validated_data["password"]
 
+        ip = get_client_ip(request)
+        ua = request.META.get("HTTP_USER_AGENT", "")
+
         # django-axes wraps authenticate(); a locked account raises
         # PermissionDenied. Unverified accounts are inactive, so authenticate()
         # returns None for them -> the same generic error (no enumeration).
@@ -270,10 +322,38 @@ class LoginView(APIView):
             clear_expired_lockout(email)
             user = authenticate(request, username=email, email=email, password=password)
         except PermissionDenied:
+            try:
+                log_action(
+                    user=None,
+                    action="login_failed",
+                    resource_type="User",
+                    ip_address=ip,
+                    user_agent=ua,
+                    device_fingerprint=_device_fingerprint(ip, ua),
+                    request_method=request.method,
+                    endpoint_path=request.path,
+                    metadata={"reason": "account_locked"},
+                )
+            except Exception:
+                pass
             normalise_auth_response_timing(start_time)
             return Response(AUTH_FAILURE_RESPONSE, status=400)
 
         if user is None:
+            try:
+                log_action(
+                    user=None,
+                    action="login_failed",
+                    resource_type="User",
+                    ip_address=ip,
+                    user_agent=ua,
+                    device_fingerprint=_device_fingerprint(ip, ua),
+                    request_method=request.method,
+                    endpoint_path=request.path,
+                    metadata={"reason": "invalid_credentials"},
+                )
+            except Exception:
+                pass
             normalise_auth_response_timing(start_time)
             return Response(AUTH_FAILURE_RESPONSE, status=400)
 
@@ -285,10 +365,44 @@ class LoginView(APIView):
         if has_mfa:
             request.session["_mfa_pending_user_id"] = str(user.pk)
             request.session["_mfa_pending_backend"] = user.backend
+            try:
+                log_action(
+                    user=user,
+                    action="login_mfa_pending",
+                    resource_type="User",
+                    resource_id=user.id,
+                    ip_address=ip,
+                    user_agent=ua,
+                    device_fingerprint=_device_fingerprint(ip, ua),
+                    role="staff" if user.is_staff else "user",
+                    request_method=request.method,
+                    endpoint_path=request.path,
+                    metadata={"reason": "mfa_required"},
+                )
+            except Exception:
+                pass
             normalise_auth_response_timing(start_time)
             return Response({"mfa_required": True}, status=200)
 
         django_login(request, user)
+
+        # Log successful login with session creation (NFSR-AC-02).
+        try:
+            log_action(
+                user=user,
+                action="login_success",
+                resource_type="User",
+                resource_id=user.id,
+                ip_address=ip,
+                user_agent=ua,
+                device_fingerprint=_device_fingerprint(ip, ua),
+                role="staff" if user.is_staff else "user",
+                request_method=request.method,
+                endpoint_path=request.path,
+                metadata={"session_key": request.session.session_key},
+            )
+        except Exception:
+            pass
 
         # Notify user if this is a new device/location.
         notify_new_device_or_location(request, user)
@@ -303,6 +417,24 @@ class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        user = request.user
+        ip = get_client_ip(request)
+        ua = request.META.get("HTTP_USER_AGENT", "")
+        try:
+            log_action(
+                user=user,
+                action="logout",
+                resource_type="User",
+                resource_id=user.id,
+                ip_address=ip,
+                user_agent=ua,
+                device_fingerprint=_device_fingerprint(ip, ua),
+                role="staff" if user.is_staff else "user",
+                request_method=request.method,
+                endpoint_path=request.path,
+            )
+        except Exception:
+            pass
         django_logout(request)
         return Response({"detail": "Signed out."}, status=200)
 
@@ -328,16 +460,38 @@ class PasswordResetRequestView(APIView):
         serializer.is_valid(raise_exception=True)
         email = serializer.validated_data["email"]
 
+        ip = get_client_ip(request)
+        ua = request.META.get("HTTP_USER_AGENT", "")
+        found_user = None
+
         try:
-            user = User.objects.get(
+            found_user = User.objects.get(
                 email=email, is_active=True, is_email_verified=True
             )
-            raw_token = generate_password_reset_token(user)
-            send_password_reset_email(user, raw_token)
+            raw_token = generate_password_reset_token(found_user)
+            send_password_reset_email(found_user, raw_token)
         except User.DoesNotExist:
             pass  # Respond identically — no account enumeration.
         except (BadHeaderError, OSError) as exc:
             logger.error("Failed to send password reset email to %s: %s", email, exc)
+
+        # Log the attempt regardless of whether the account exists (NFSR-AC-02).
+        try:
+            log_action(
+                user=found_user,
+                action="password_reset_requested",
+                resource_type="User",
+                resource_id=found_user.id if found_user else None,
+                ip_address=ip,
+                user_agent=ua,
+                device_fingerprint=_device_fingerprint(ip, ua),
+                role="user" if found_user else "anonymous",
+                request_method=request.method,
+                endpoint_path=request.path,
+                metadata={"email_submitted": email},
+            )
+        except Exception:
+            pass
 
         normalise_auth_response_timing(start_time)
         return Response(
@@ -394,6 +548,22 @@ class PasswordResetConfirmView(APIView):
         # Invalidate all active sessions across all devices.
         invalidate_all_user_sessions(user)
 
+        ip = get_client_ip(request)
+        ua = request.META.get("HTTP_USER_AGENT", "")
+        log_action(
+            user=user,
+            action="password_reset_confirmed",
+            resource_type="User",
+            resource_id=user.id,
+            ip_address=ip,
+            user_agent=ua,
+            device_fingerprint=_device_fingerprint(ip, ua),
+            role="staff" if user.is_staff else "user",
+            request_method=request.method,
+            endpoint_path=request.path,
+            metadata={"email": user.email},
+        )
+
         return Response(
             {"detail": "Password updated. You can now sign in."},
             status=200,
@@ -446,6 +616,22 @@ class PasswordChangeView(APIView):
         request.session.flush()
         invalidate_all_user_sessions(request.user)
 
+        ip = get_client_ip(request)
+        ua = request.META.get("HTTP_USER_AGENT", "")
+        log_action(
+            user=request.user,
+            action="password_changed",
+            resource_type="User",
+            resource_id=request.user.id,
+            ip_address=ip,
+            user_agent=ua,
+            device_fingerprint=_device_fingerprint(ip, ua),
+            role="staff" if request.user.is_staff else "user",
+            request_method=request.method,
+            endpoint_path=request.path,
+            metadata={"email": request.user.email},
+        )
+
         return Response(
             {"detail": "Password changed successfully. Please sign in again."},
             status=200,
@@ -476,6 +662,8 @@ class StaffInviteView(APIView):
             )
 
         user = None
+        ip = get_client_ip(request)
+        ua = request.META.get("HTTP_USER_AGENT", "")
         try:
             user = User.objects.create_user(
                 email=email,
@@ -488,17 +676,23 @@ class StaffInviteView(APIView):
             raw_token = generate_staff_invite_token(user, invited_by=request.user)
             send_invite_email(user, raw_token, invited_by=request.user)
 
-            LogEntry.objects.log_create(
-                instance=user,
-                action=LogEntry.Action.CREATE,
-                changes={
-                    "event": "STAFF_INVITE",
+            # Log admin role promotion (NFSR-AC-02).
+            log_action(
+                user=request.user,
+                action="admin_role_promoted",
+                resource_type="User",
+                resource_id=user.id,
+                ip_address=ip,
+                user_agent=ua,
+                device_fingerprint=_device_fingerprint(ip, ua),
+                role="staff" if request.user.is_staff else "user",
+                request_method=request.method,
+                endpoint_path=request.path,
+                metadata={
+                    "invited_email": email,
                     "invited_by": request.user.email,
-                    "invited_by_id": str(request.user.id),
-                    "staff_user_email": user.email,
-                    "staff_user_id": str(user.id),
+                    "new_role": "staff",
                 },
-                actor=request.user,
             )
         except (BadHeaderError, smtplib.SMTPException, OSError) as exc:
             logger.error("Failed to send staff invite to %s: %s", email, exc)
@@ -554,6 +748,25 @@ class AcceptInviteView(APIView):
         record.is_used = True
         record.save(update_fields=["is_used"])
 
+        ip = get_client_ip(request)
+        ua = request.META.get("HTTP_USER_AGENT", "")
+        try:
+            log_action(
+                user=user,
+                action="staff_account_activated",
+                resource_type="User",
+                resource_id=user.id,
+                ip_address=ip,
+                user_agent=ua,
+                device_fingerprint=_device_fingerprint(ip, ua),
+                role="staff",
+                request_method=request.method,
+                endpoint_path=request.path,
+                metadata={"email": user.email},
+            )
+        except Exception:
+            pass
+
         return Response(
             {"detail": "Account set up successfully. You can now sign in."},
             status=200,
@@ -604,9 +817,24 @@ class DeleteAccountView(APIView):
                 return Response({"detail": "Invalid MFA code."}, status=400)
 
         email = user.email
+        ip = get_client_ip(request)
+        ua = request.META.get("HTTP_USER_AGENT", "")
         # Flush the current session properly so Django's session middleware
         # does not try to save a session that no longer exists after deletion.
         request.session.flush()
+        log_action(
+            user=user,
+            action="account_deleted",
+            resource_type="User",
+            resource_id=user.id,
+            ip_address=ip,
+            user_agent=ua,
+            device_fingerprint=_device_fingerprint(ip, ua),
+            role="staff" if user.is_staff else "user",
+            request_method=request.method,
+            endpoint_path=request.path,
+            metadata={"email": email},
+        )
         user.delete()
         logger.info("User %s deleted their own account", email)
         return Response({"detail": "Your account has been deleted."}, status=200)
@@ -664,6 +892,21 @@ class AdminUserDetailView(APIView):
         target.is_active = not target.is_active
         target.save(update_fields=["is_active"])
         action = "unlocked" if target.is_active else "locked"
+        ip = get_client_ip(request)
+        ua = request.META.get("HTTP_USER_AGENT", "")
+        log_action(
+            user=request.user,
+            action="admin_account_toggled",
+            resource_type="User",
+            resource_id=target.id,
+            ip_address=ip,
+            user_agent=ua,
+            device_fingerprint=_device_fingerprint(ip, ua),
+            role="staff" if request.user.is_staff else "user",
+            request_method=request.method,
+            endpoint_path=request.path,
+            metadata={"target_email": target.email, "action": action},
+        )
         logger.info("Admin %s %s account %s", request.user.email, action, target.email)
         return Response({"detail": f"Account {action}.", "is_active": target.is_active})
 
@@ -674,6 +917,21 @@ class AdminUserDetailView(APIView):
             return err
 
         email = target.email
+        ip = get_client_ip(request)
+        ua = request.META.get("HTTP_USER_AGENT", "")
+        log_action(
+            user=request.user,
+            action="admin_account_deleted",
+            resource_type="User",
+            resource_id=target.id,
+            ip_address=ip,
+            user_agent=ua,
+            device_fingerprint=_device_fingerprint(ip, ua),
+            role="staff" if request.user.is_staff else "user",
+            request_method=request.method,
+            endpoint_path=request.path,
+            metadata={"target_email": email},
+        )
         target.delete()
         logger.info("Admin %s deleted account %s", request.user.email, email)
         return Response({"detail": "Account deleted."}, status=200)
@@ -811,6 +1069,8 @@ class MFALoginVerifyView(APIView):
                 {"detail": "Session expired. Please log in again."}, status=400
             )
 
+        ip = get_client_ip(request)
+        ua = request.META.get("HTTP_USER_AGENT", "")
         otp_code = request.data.get("otp_code", "").replace(" ", "")
         device = TOTPDevice.objects.filter(user=user, confirmed=True).first()
 
@@ -820,6 +1080,22 @@ class MFALoginVerifyView(APIView):
                 credentials={"username": user.email},
                 request=request,
             )
+            try:
+                log_action(
+                    user=user,
+                    action="mfa_login_failed",
+                    resource_type="User",
+                    resource_id=user.id,
+                    ip_address=ip,
+                    user_agent=ua,
+                    device_fingerprint=_device_fingerprint(ip, ua),
+                    role="staff" if user.is_staff else "user",
+                    request_method=request.method,
+                    endpoint_path=request.path,
+                    metadata={"reason": "invalid_otp"},
+                )
+            except Exception:
+                pass
             return Response({"detail": "Invalid code. Please try again."}, status=400)
 
         # Clear pending markers before elevating to a full session.
@@ -829,5 +1105,22 @@ class MFALoginVerifyView(APIView):
         user.backend = backend
         django_login(request, user)
         notify_new_device_or_location(request, user)
+
+        try:
+            log_action(
+                user=user,
+                action="mfa_login_success",
+                resource_type="User",
+                resource_id=user.id,
+                ip_address=ip,
+                user_agent=ua,
+                device_fingerprint=_device_fingerprint(ip, ua),
+                role="staff" if user.is_staff else "user",
+                request_method=request.method,
+                endpoint_path=request.path,
+                metadata={"session_key": request.session.session_key},
+            )
+        except Exception:
+            pass
 
         return Response(UserProfileSerializer(user).data, status=200)

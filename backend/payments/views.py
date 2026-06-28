@@ -114,6 +114,22 @@ class CreatePaymentIntentView(APIView):
             order.stripe_payment_intent_id = intent["id"]
             order.save(update_fields=["stripe_payment_intent_id", "updated_at"])
 
+        log_action(
+            user=request.user,
+            action="CHECKOUT_INITIATED",
+            resource_type="Order",
+            resource_id=order.id,
+            ip_address=request.META.get("REMOTE_ADDR", ""),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            request_method=request.method,
+            endpoint_path=request.path,
+            metadata={
+                "order_id": str(order.id),
+                "amount_cents": amount_cents,
+                "currency": settings.STRIPE_CURRENCY,
+            },
+        )
+
         return Response(
             {
                 "client_secret": intent["client_secret"],
