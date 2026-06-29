@@ -140,6 +140,25 @@ class Listing(models.Model):
             fields_to_update.append("updated_at")
             self.save(update_fields=fields_to_update)
 
+        # Log winner selection exactly once, when the winner field is first set.
+        if fields_to_update and "winner" in fields_to_update and winning_bid:
+            try:
+                from core.audit import log_action
+                log_action(
+                    user=winning_bid.bidder,
+                    action="winner_selected",
+                    resource_type="Listing",
+                    resource_id=self.id,
+                    role="user",
+                    metadata={
+                        "winning_bid_id": str(winning_bid.id),
+                        "winning_amount": str(winning_bid.amount),
+                        "listing_title": self.title,
+                    },
+                )
+            except Exception:
+                pass  # Never block auction finalization due to a logging failure.
+
         if winning_bid:
             self.bids.exclude(pk=winning_bid.pk).update(is_winning=False)
             if not winning_bid.is_winning:
