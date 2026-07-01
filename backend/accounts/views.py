@@ -5,6 +5,8 @@ import logging
 import smtplib
 import time
 
+from django.db.models import Q
+
 import qrcode
 from axes.utils import reset
 from django.contrib.auth import authenticate
@@ -785,6 +787,13 @@ class DeleteAccountView(APIView):
     def post(self, request):
         user = request.user
 
+        # Admin accounts must be deleted by another admin, not by themselves.
+        if user.is_staff or user.is_superuser:
+            return Response(
+                {"detail": "Admin accounts cannot be self-deleted. Contact another administrator."},
+                status=403,
+            )
+
         # Step 1: require current password re-entry (SFR-05a).
         current_password = request.data.get("current_password", "")
         if not current_password:
@@ -1180,6 +1189,15 @@ _CATEGORY_FILTERS = {
     "errors": lambda qs: qs.exclude(exception_type=""),
 }
 
+# Categories a regular admin (non-superuser) may request.
+_REGULAR_ADMIN_CATEGORIES = {"all", "bids"}
+
+# For the "all" tab, regular admins only see auction + bid events.
+def _restrict_to_auction_and_bids(qs):
+    return qs.filter(
+        Q(action__icontains="bid") | Q(action__icontains="listing")
+    )
+
 
 def _severity(entry):
     action = entry.action.lower()
@@ -1227,18 +1245,71 @@ def _serialize_entry(entry):
 
 
 class AdminAuditLogView(APIView):
-    """Return audit log entries for the admin panel (staff only)."""
+    """Return audit log entries for the admin panel (staff only).
+
+    Access tiers (NFSR-AC-04 / FSR-AC-06):
+    - Superuser: full trail, all categories including payments.
+    - Regular admin: auction and bid logs only; payment/login/error
+      categories are blocked with 403.
+    Every read is itself logged (NFSR-AC-04).
+    """
 
     permission_classes = [IsAdminUser]
 
     def get(self, request):
         from core.models import AuditLog
 
+        is_superuser = request.user.is_superuser
         category = request.query_params.get("category", "all")
+        ip = get_client_ip(request)
+        ua = request.META.get("HTTP_USER_AGENT", "")
+
+        # Enforce category-level access for regular admins.
+        if not is_superuser and category not in _REGULAR_ADMIN_CATEGORIES:
+            log_action(
+                user=request.user,
+                action="audit_log_access_denied",
+                resource_type="AuditLog",
+                ip_address=ip,
+                user_agent=ua,
+                device_fingerprint=_device_fingerprint(ip, ua),
+                role="staff",
+                request_method=request.method,
+                endpoint_path=request.path,
+                metadata={"category": category, "reason": "insufficient_role"},
+            )
+            return Response(
+                {"detail": "You do not have permission to view this category."},
+                status=403,
+            )
+
         qs = AuditLog.objects.select_related("user").order_by("-timestamp")
 
-        filter_fn = _CATEGORY_FILTERS.get(category)
-        if filter_fn:
-            qs = filter_fn(qs)
+        # Regular admins: restrict "all" to auction + bid events.
+        if not is_superuser and category == "all":
+            qs = _restrict_to_auction_and_bids(qs)
+        else:
+            filter_fn = _CATEGORY_FILTERS.get(category)
+            if filter_fn:
+                qs = filter_fn(qs)
 
-        return Response([_serialize_entry(e) for e in qs[:500]])
+        results = [_serialize_entry(e) for e in qs[:500]]
+
+        # Log this read access (NFSR-AC-04).
+        try:
+            log_action(
+                user=request.user,
+                action="audit_log_read",
+                resource_type="AuditLog",
+                ip_address=ip,
+                user_agent=ua,
+                device_fingerprint=_device_fingerprint(ip, ua),
+                role="superuser" if is_superuser else "staff",
+                request_method=request.method,
+                endpoint_path=request.path,
+                metadata={"category": category, "result_count": len(results)},
+            )
+        except Exception:
+            pass
+
+        return Response(results)

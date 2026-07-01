@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import AdminLayout from "../../components/admin/AdminLayout.jsx";
 import { deleteAdminUser, getAdminUsers, sendStaffInvite, toggleUserLock } from "../../api/auth.js";
+import { useAuth } from "../../context/AuthContext.jsx";
 
 const ROLE_OPTIONS   = ["All", "Superuser", "Staff", "Bidder"];
 const STATUS_OPTIONS = ["All", "Active", "Pending", "Locked"];
@@ -82,6 +83,8 @@ function ActionBtn({ onClick, disabled, children, danger }) {
 }
 
 export default function AdminUsers() {
+  const { user: currentUser } = useAuth();
+
   // ── Invite form ────────────────────────────────────────────────────────────
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviting, setInviting]       = useState(false);
@@ -291,6 +294,7 @@ export default function AdminUsers() {
                 const confirmingDelete = busy === "confirm-delete";
                 const isLocked = u.status === "Locked";
                 const isProtected = u.role === "Superuser";
+                const isSelf = u.id === currentUser?.id;
 
                 return (
                   <tr key={u.id} style={{ borderBottom: "1px solid rgba(27,26,23,.06)" }}>
@@ -302,8 +306,8 @@ export default function AdminUsers() {
                     <td style={{ padding: ".7rem 1.25rem" }}><StatusDot status={u.status} /></td>
                     <td style={{ padding: ".7rem 1.25rem", opacity: .5 }}>{formatDate(u.created_at)}</td>
                     <td style={{ padding: ".7rem 1.25rem" }}>
-                      {isProtected ? (
-                        <span style={{ fontSize: ".72rem", opacity: .35 }}>Protected</span>
+                      {isProtected || isSelf ? (
+                        <span style={{ fontSize: ".72rem", opacity: .35 }}>{isSelf ? "You" : "Protected"}</span>
                       ) : confirmingDelete ? (
                         /* Inline delete confirmation */
                         <span style={{ display: "inline-flex", gap: ".4rem", alignItems: "center" }}>

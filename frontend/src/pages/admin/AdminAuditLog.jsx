@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import AdminLayout from "../../components/admin/AdminLayout.jsx";
 import { getAuditLog } from "../../api/auth.js";
+import { useAuth } from "../../context/AuthContext.jsx";
 import { useWebSocket } from "../../hooks/useWebSocket.js";
 
 function fmtTimestamp(iso) {
@@ -13,13 +14,13 @@ function fmtTimestamp(iso) {
   });
 }
 
-const TABS = [
-  { label: "All Events",     key: "all" },
-  { label: "Login / Logout", key: "login_logout" },
-  { label: "Bids",           key: "bids" },
-  { label: "Admin Actions",  key: "admin_actions" },
-  { label: "Payments",       key: "payments" },
-  { label: "Errors",         key: "errors" },
+const ALL_TABS = [
+  { label: "All Events",     key: "all",           superuserOnly: false },
+  { label: "Login / Logout", key: "login_logout",  superuserOnly: true  },
+  { label: "Bids",           key: "bids",           superuserOnly: false },
+  { label: "Admin Actions",  key: "admin_actions",  superuserOnly: true  },
+  { label: "Payments",       key: "payments",       superuserOnly: true  },
+  { label: "Errors",         key: "errors",         superuserOnly: true  },
 ];
 
 const SEVERITY_COLOR = {
@@ -86,6 +87,10 @@ function exportCsv(rows) {
 }
 
 export default function AdminAuditLog() {
+  const { user } = useAuth();
+  const isSuperuser = user?.is_superuser === true;
+  const TABS = ALL_TABS.filter((t) => isSuperuser || !t.superuserOnly);
+
   const [rows, setRows]       = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState(null);
