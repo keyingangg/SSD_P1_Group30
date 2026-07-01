@@ -54,3 +54,8 @@ export async function getUserDashboard() {
   const { data } = await axiosClient.get("/auctions/dashboard/");
   return data;
 }
+
+export async function getAdminOverview() {
+  const { data } = await axiosClient.get("/auctions/admin/overview/");
+  return data;
+}

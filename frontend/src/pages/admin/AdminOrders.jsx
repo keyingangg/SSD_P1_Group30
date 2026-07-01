@@ -177,7 +177,7 @@ export default function AdminOrders() {
                   fontSize: "10px",
                   fontWeight: 700,
                   padding: "1px 6px",
-                  borderRadius: "999px",
+                  borderRadius: 0,
                   background: tab === t ? "rgba(255,255,255,0.25)" : "rgba(27,26,23,0.1)",
                   color: tab === t ? "#fff" : "var(--ink-soft)",
                 }}
