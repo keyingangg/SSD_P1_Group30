@@ -34,15 +34,25 @@ _audit_logger = logging.getLogger(__name__)
 
 
 def _unauth_ip_key(group, request):
-    """Rate-limit key for unauthenticated requests only.
+    """Rate-limit key: the client's IP address.
 
-    Returns the client IP for anonymous users so the limit applies to them;
-    returns None for authenticated users so django-ratelimit skips the check
+    Always returns a string — django-ratelimit's key callable does not
+    support returning None to skip the check (it crashes on non-string
+    values). Skipping for authenticated users is done via `_unauth_only_rate`
+    instead, which is the mechanism the library actually supports.
+    """
+    return request.META.get("REMOTE_ADDR", "")
+
+
+def _unauth_only_rate(group, request):
+    """Rate for unauthenticated requests only.
+
+    Returns None for authenticated users so django-ratelimit skips the check
     entirely — authenticated users are already throttled on write actions.
     """
     if getattr(request.user, "is_authenticated", False):
         return None
-    return request.META.get("REMOTE_ADDR", "")
+    return "30/m"
 
 
 class BidImmutableMixin:
@@ -87,7 +97,7 @@ logger = logging.getLogger("securebid")
 
 
 @method_decorator(
-    ratelimit(key=_unauth_ip_key, rate="30/m", method="GET", block=True),
+    ratelimit(key=_unauth_ip_key, rate=_unauth_only_rate, method="GET", block=True),
     name="get",
 )
 class ListingListView(APIView):
@@ -109,7 +119,7 @@ class ListingListView(APIView):
 
 
 @method_decorator(
-    ratelimit(key=_unauth_ip_key, rate="30/m", method="GET", block=True),
+    ratelimit(key=_unauth_ip_key, rate=_unauth_only_rate, method="GET", block=True),
     name="get",
 )
 class ListingDetailView(APIView):
