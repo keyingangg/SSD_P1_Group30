@@ -32,8 +32,6 @@ export default function AdminOverview() {
   const [overview, setOverview] = useState(null);
   const [error, setError] = useState(null);
 
-  const { lastMessage, usingPoll } = useWebSocket("/ws/catalogue/");
-
   const refresh = useCallback(() => {
     getAdminOverview()
       .then(setOverview)
@@ -43,30 +41,27 @@ export default function AdminOverview() {
   // Initial load
   useEffect(() => { refresh(); }, [refresh]);
 
-  // Refresh immediately when catalogue changes via WebSocket
+  // Catalogue WebSocket — re-fetch immediately when any auction changes
+  const { lastMessage, usingPoll } = useWebSocket("/ws/catalogue/");
   useEffect(() => {
     if (lastMessage?.event === "catalogue_changed") refresh();
   }, [lastMessage, refresh]);
 
-  // REST polling fallback — ≤5 s when WebSocket unavailable, 30 s otherwise
+  // While WebSocket is healthy: 30 s heartbeat.
+  // After WebSocket falls back: poll at ≤5 s to satisfy NFR reconnection policy.
   useEffect(() => {
     const id = setInterval(refresh, usingPoll ? 5000 : 30000);
     return () => clearInterval(id);
-  }, [usingPoll, refresh]);
+  }, [refresh, usingPoll]);
 
   const stats = overview
     ? [
-        { label: "Active Listings",  value: String(overview.stats.active_listings),                   sub: "Currently live",      color: "green"  },
-        { label: "Pending Payments", value: String(overview.stats.pending_payments),                   sub: "Awaiting checkout",   color: "amber"  },
-        { label: "Bids Today",       value: String(overview.stats.bids_today),                         sub: "Across all listings", color: ""       },
-        { label: "Registered Users", value: Number(overview.stats.registered_users).toLocaleString(),  sub: "Total accounts",      color: "purple" },
+        { label: "Active Listings",  value: String(overview.stats.active_listings),                        sub: "Currently live",      color: "green"  },
+        { label: "Pending Payments", value: String(overview.stats.pending_payments),                       sub: "Awaiting checkout",   color: "amber"  },
+        { label: "Bids Today",       value: String(overview.stats.bids_today),                             sub: "Across all listings", color: ""       },
+        { label: "Registered Users", value: Number(overview.stats.registered_users).toLocaleString(),      sub: "Total accounts",      color: "purple" },
       ]
-    : [
-        { label: "Active Listings",  value: "—", sub: "Loading…", color: "green"  },
-        { label: "Pending Payments", value: "—", sub: "Loading…", color: "amber"  },
-        { label: "Bids Today",       value: "—", sub: "Loading…", color: ""       },
-        { label: "Registered Users", value: "—", sub: "Loading…", color: "purple" },
-      ];
+    : [];
 
   return (
     <AdminLayout>
@@ -77,13 +72,21 @@ export default function AdminOverview() {
 
       {/* Stat cards */}
       <div className="admin-stats">
-        {stats.map((s) => (
-          <div key={s.label} className={`admin-stat-card${s.color ? ` ${s.color}` : ""}`}>
-            <p className="admin-stat-label">{s.label}</p>
-            <p className="admin-stat-value">{s.value}</p>
-            <p className="admin-stat-sub">{s.sub}</p>
-          </div>
-        ))}
+        {overview
+          ? stats.map((s) => (
+              <div key={s.label} className={`admin-stat-card${s.color ? ` ${s.color}` : ""}`}>
+                <p className="admin-stat-label">{s.label}</p>
+                <p className="admin-stat-value">{s.value}</p>
+                <p className="admin-stat-sub">{s.sub}</p>
+              </div>
+            ))
+          : [0, 1, 2, 3].map((i) => (
+              <div key={i} className="admin-stat-card" style={{ opacity: 0.4 }}>
+                <p className="admin-stat-label">—</p>
+                <p className="admin-stat-value">…</p>
+                <p className="admin-stat-sub">Loading</p>
+              </div>
+            ))}
       </div>
 
       {/* Two-column grid */}
@@ -92,11 +95,9 @@ export default function AdminOverview() {
         <div className="admin-panel">
           <div className="admin-panel-header">
             <span className="admin-panel-title">Recent Audit Events</span>
-            <span className="admin-panel-sub">NFR-06 · Tamper-evident log</span>
           </div>
           <div className="audit-list">
-            {!overview && <p style={{ padding: "1rem", opacity: 0.5 }}>Loading…</p>}
-            {overview?.audit_events?.length === 0 && (
+            {overview && overview.audit_events.length === 0 && (
               <p style={{ padding: "1rem", opacity: 0.5 }}>No audit events yet.</p>
             )}
             {(overview?.audit_events ?? []).map((e, i) => (
@@ -120,8 +121,7 @@ export default function AdminOverview() {
             <span className="admin-panel-title">Active Auctions</span>
           </div>
           <div className="auction-list">
-            {!overview && <p style={{ padding: "1rem", opacity: 0.5 }}>Loading…</p>}
-            {overview?.active_auctions?.length === 0 && (
+            {overview && overview.active_auctions.length === 0 && (
               <p style={{ padding: "1rem", opacity: 0.5 }}>No active auctions.</p>
             )}
             {(overview?.active_auctions ?? []).map((a) => {
@@ -155,7 +155,9 @@ export default function AdminOverview() {
               payments — winners have been notified.
             </p>
           </div>
-          <Link to="/admin/orders" className="admin-alert-btn">View Orders</Link>
+          <Link to="/admin/orders" className="admin-alert-btn">
+            View Orders
+          </Link>
         </div>
       )}
     </AdminLayout>
