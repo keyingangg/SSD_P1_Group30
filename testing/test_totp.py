@@ -119,8 +119,7 @@ def test_mfa_enrol_confirm_no_pending_device_returns_400(auth_client):
 
 @pytest.mark.django_db
 def test_mfa_enrol_confirm_logs_audit_event(auth_client, verified_user):
-    from auditlog.models import LogEntry
-    from django.contrib.contenttypes.models import ContentType
+    from core.models import AuditLog
 
     auth_client.get(MFA_ENROL_URL)
     device = TOTPDevice.objects.get(user=verified_user, confirmed=False)
@@ -128,9 +127,7 @@ def test_mfa_enrol_confirm_logs_audit_event(auth_client, verified_user):
 
     auth_client.post(MFA_ENROL_CONFIRM_URL, {"otp_code": token}, format="json")
 
-    ct = ContentType.objects.get_for_model(verified_user)
-    entries = LogEntry.objects.filter(content_type=ct, object_pk=str(verified_user.pk))
-    assert entries.filter(changes__has_key="mfa_enrolled").exists()
+    assert AuditLog.objects.filter(user=verified_user, action="mfa_enrolled").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -153,15 +150,12 @@ def test_mfa_unenrol_not_enrolled_returns_400(auth_client):
 
 @pytest.mark.django_db
 def test_mfa_unenrol_logs_audit_event(auth_client, verified_user):
-    from auditlog.models import LogEntry
-    from django.contrib.contenttypes.models import ContentType
+    from core.models import AuditLog
 
     _make_device(verified_user)
     auth_client.post(MFA_UNENROL_URL)
 
-    ct = ContentType.objects.get_for_model(verified_user)
-    entries = LogEntry.objects.filter(content_type=ct, object_pk=str(verified_user.pk))
-    assert entries.filter(changes__has_key="mfa_disabled").exists()
+    assert AuditLog.objects.filter(user=verified_user, action="mfa_disabled").exists()
 
 
 @pytest.mark.django_db
@@ -274,7 +268,10 @@ def test_delete_account_with_mfa_valid_otp_succeeds(auth_client, verified_user):
     with patch("accounts.views.invalidate_all_user_sessions"):
         resp = auth_client.post(DELETE_ACCOUNT_URL, {"current_password": "StrongPass123!", "otp_code": token}, format="json")
     assert resp.status_code == 200
-    assert not User.objects.filter(pk=verified_user.pk).exists()
+    # Soft-delete: user row is kept with PII anonymised (NFSR-C-08 / SFR-05c).
+    verified_user.refresh_from_db()
+    assert verified_user.is_anonymised is True
+    assert verified_user.is_active is False
 
 
 @pytest.mark.django_db
@@ -290,4 +287,7 @@ def test_delete_account_without_mfa_succeeds_without_otp(auth_client, verified_u
     with patch("accounts.views.invalidate_all_user_sessions"):
         resp = auth_client.post(DELETE_ACCOUNT_URL, {"current_password": "StrongPass123!"}, format="json")
     assert resp.status_code == 200
-    assert not User.objects.filter(pk=verified_user.pk).exists()
+    # Soft-delete: user row is kept with PII anonymised (NFSR-C-08 / SFR-05c).
+    verified_user.refresh_from_db()
+    assert verified_user.is_anonymised is True
+    assert verified_user.is_active is False

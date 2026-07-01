@@ -1,6 +1,7 @@
 """URL patterns for the accounts app."""
 from django.urls import path
 
+from core.views import AuditLogListView
 from . import views
 
 urlpatterns = [
@@ -10,6 +11,7 @@ urlpatterns = [
     path("login/", views.LoginView.as_view(), name="login"),
     path("logout/", views.LogoutView.as_view(), name="logout"),
     path("profile/", views.UserProfileView.as_view(), name="profile"),
+    path("audit-logs/", AuditLogListView.as_view(), name="audit-logs"),
 
     path(
         "password-reset/",
