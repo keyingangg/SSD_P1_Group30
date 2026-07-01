@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { submitBid } from "../api/auctions.js";
 
 export default function BidForm({ listingId, listing, onBidPlaced, onBidRejected, onBidConflict }) {
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const submittingRef = useRef(false);
 
   const runtimeStatus = String(listing?.status || "").toLowerCase();
   const displayStatus = String(listing?.display_status || "").toLowerCase();
@@ -51,6 +52,9 @@ export default function BidForm({ listingId, listing, onBidPlaced, onBidRejected
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // Synchronous guard — React state updates are async so a fast double-click
+    // can fire two submits before the button is visually disabled.
+    if (submittingRef.current) return;
     setError("");
 
     if (!isActive) {
@@ -67,6 +71,7 @@ export default function BidForm({ listingId, listing, onBidPlaced, onBidRejected
     }
 
     try {
+      submittingRef.current = true;
       setSubmitting(true);
       const placed = Number(amount);
       await submitBid(listingId, amount);
@@ -87,6 +92,7 @@ export default function BidForm({ listingId, listing, onBidPlaced, onBidRejected
         setError(detail);
       }
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };

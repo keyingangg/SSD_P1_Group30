@@ -8,9 +8,10 @@ const POLL_INTERVAL_MS = 5000;
 function asBidLike(message) {
   if (!message || typeof message !== "object") return null;
 
-  if (message.amount != null) {
+  // Normalised bid_placed event (sent by bid_engine._broadcast_bid)
+  if (message.event === "bid_placed" && message.amount != null) {
     return {
-      id: message.id,
+      id: message.bid_id ?? message.id,
       anonymous_identifier: message.anonymous_identifier,
       amount: String(message.amount),
       submitted_at: message.submitted_at,
@@ -18,9 +19,10 @@ function asBidLike(message) {
     };
   }
 
+  // Legacy fallback: message only carries current_highest_bid
   if (message.current_highest_bid != null) {
     return {
-      id: message.id,
+      id: message.bid_id ?? message.id,
       anonymous_identifier: message.anonymous_identifier,
       amount: String(message.current_highest_bid),
       submitted_at: message.submitted_at ?? new Date().toISOString(),
@@ -72,7 +74,7 @@ export function useBidFeed(listingId) {
   // Initial load
   useEffect(() => {
     if (!listingId) return;
-    fetchBids();
+    refreshFromRest();
   }, [listingId]);
 
   // When a bid_placed WebSocket message arrives, re-fetch the full ordered list

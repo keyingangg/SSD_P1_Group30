@@ -20,6 +20,9 @@ WS_CLOSE_ORIGIN_REJECTED = 4004
 WS_CLOSE_RATE_LIMITED = 4029
 
 
+CATALOGUE_GROUP = "catalogue"
+
+
 def _group_name(listing_id: str) -> str:
     """Stable channel group name for a listing."""
     return f"auction_{listing_id}"

@@ -56,6 +56,9 @@ class ListingSerializer(serializers.ModelSerializer):
         return obj.get_display_status()
 
     def get_bid_count(self, obj):
+        # Use the pre-annotated value from the list queryset to avoid N+1 queries
+        if hasattr(obj, "_bid_count"):
+            return obj._bid_count
         return obj.bids.count()
 
     def to_representation(self, instance):

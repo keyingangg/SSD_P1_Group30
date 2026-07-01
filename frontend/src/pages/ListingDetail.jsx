@@ -46,7 +46,7 @@ export default function ListingDetail() {
     const saved = localStorage.getItem(storageKey);
     return saved ? Number(saved) : null;
   });
-  const { bids, lastMessage, usingPoll } = useBidFeed(id);
+  const { bids, lastMessage, isPolling } = useBidFeed(id);
 
   async function refreshListing() {
     const data = await getListingDetail(id);
@@ -105,10 +105,10 @@ export default function ListingDetail() {
 
   // Fallback: poll listing + bids every 5 s when WebSocket is unavailable
   useEffect(() => {
-    if (!id || !usingPoll) return;
+    if (!id || !isPolling) return;
     const interval = setInterval(refreshListing, 5000);
     return () => clearInterval(interval);
-  }, [id, usingPoll]);
+  }, [id, isPolling]);
 
   const runtimeStatus = String(listing?.status || "").toLowerCase();
   const displayStatus = String(listing?.display_status || "").toLowerCase();
@@ -363,7 +363,7 @@ export default function ListingDetail() {
                             Auction Live
                           </span>
                           <span className="ld-status-sep">·</span>
-                          <span className="ld-status-info" style={{ color: usingPoll ? "#b8a04a" : "#3a7d55" }}>{usingPoll ? "Polling (5s)" : "Live updates"}</span>
+                          <span className="ld-status-info" style={{ color: isPolling ? "#b8a04a" : "#3a7d55" }}>{isPolling ? "Polling (5s)" : "Live updates"}</span>
                         </>
                       ) : (
                         <>

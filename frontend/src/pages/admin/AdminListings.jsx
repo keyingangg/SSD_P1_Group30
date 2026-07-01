@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import AdminLayout from "../../components/admin/AdminLayout.jsx";
 import axiosClient from "../../api/axiosClient.js";
 import { deleteListing, getListings } from "../../api/auctions.js";
+import { useWebSocket } from "../../hooks/useWebSocket.js";
 
 const TABS = ["All Lots", "Live", "Scheduled", "Ended", "Draft", "Cancelled"];
 
@@ -59,23 +60,30 @@ export default function AdminListings() {
   const [tab, setTab] = useState("All Lots");
   const navigate = useNavigate();
 
-  const load = async () => {
-    setLoading(true);
+  const { lastMessage, usingPoll } = useWebSocket("/ws/catalogue/");
+
+  const load = useCallback(async () => {
     setError(null);
     try { setListings(await getListings()); }
     catch { setError("Could not load listings. Please refresh."); }
-    finally { setLoading(false); }
-  };
-
-  useEffect(() => { load(); }, []);
-
-  // Re-fetch every 30 s so new listings / status changes appear automatically
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      try { setListings(await getListings()); } catch { /* silent */ }
-    }, 30000);
-    return () => clearInterval(interval);
   }, []);
+
+  // Initial load
+  useEffect(() => {
+    setLoading(true);
+    load().finally(() => setLoading(false));
+  }, [load]);
+
+  // Refresh immediately when catalogue changes via WebSocket
+  useEffect(() => {
+    if (lastMessage?.event === "catalogue_changed") load();
+  }, [lastMessage, load]);
+
+  // REST polling fallback — ≤5 s when WebSocket is unavailable, 30 s otherwise
+  useEffect(() => {
+    const id = setInterval(load, usingPoll ? 5000 : 30000);
+    return () => clearInterval(id);
+  }, [usingPoll, load]);
 
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this listing? This cannot be undone.")) return;

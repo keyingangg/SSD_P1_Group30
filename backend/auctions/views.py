@@ -16,8 +16,6 @@ from rest_framework.parsers import MultiPartParser
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from accounts.permissions import IsAdminUser, IsEmailVerified, IsEmailVerifiedSilent
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
 
 from core.audit import log_action, device_fingerprint as _device_fingerprint
 from core.storage import upload_image
@@ -98,6 +96,24 @@ class BidImmutableMixin:
 logger = logging.getLogger("securebid")
 
 
+def _broadcast_catalogue_update():
+    """Push a catalogue-changed event via the channel layer.
+
+    No-op when the channel layer is not configured (e.g. plain WSGI runserver).
+    Exceptions are swallowed so a missing channel layer never breaks REST calls.
+    """
+    channel_layer = get_channel_layer()
+    if channel_layer is None:
+        return
+    try:
+        async_to_sync(channel_layer.group_send)(
+            "catalogue",
+            {"type": "catalogue.update", "data": {"event": "catalogue_changed"}},
+        )
+    except Exception:
+        pass
+
+
 @method_decorator(
     ratelimit(key=_unauth_ip_key, rate=_unauth_only_rate, method="GET", block=True),
     name="get",
@@ -113,7 +129,7 @@ class ListingListView(APIView):
         Listing.objects.filter(
             status="scheduled", starts_at__lte=now, ends_at__gt=now
         ).update(status="active")
-        queryset = Listing.objects.all().order_by("-starts_at")
+        queryset = Listing.objects.annotate(_bid_count=Count("bids")).order_by("-starts_at")
         if not request.user.is_staff:
             queryset = queryset.exclude(status__in=["draft", "cancelled"])
         serializer = ListingSerializer(queryset, many=True)
@@ -254,14 +270,21 @@ class ListingUpdateView(APIView):
         except Listing.DoesNotExist:
             return Response({"detail": "Listing not found."}, status=404)
 
-        if listing.status == "active":
-            return Response(
-                {"detail": "This listing cannot be modified while the auction is live. Cancel it first."},
-                status=409,
-            )
-        if listing.bids.exists() and listing.status != "cancelled":
+        has_bids = listing.bids.exists()
+        saving_as_draft = request.data.get("save_as_draft", False)
+
+        # Bids have been placed — no further changes allowed (except on cancelled listings)
+        if has_bids and listing.status != "cancelled":
             return Response(
                 {"detail": "This listing cannot be modified because bids have already been placed. Cancel the auction first, then make changes."},
+                status=409,
+            )
+
+        # Active (live) auction with no bids: allow save-as-draft to pull it back,
+        # but block re-publishing (admins must cancel first to change the schedule).
+        if listing.status == "active" and not saving_as_draft:
+            return Response(
+                {"detail": "This listing cannot be modified while the auction is live. Cancel it first."},
                 status=409,
             )
 
@@ -300,33 +323,6 @@ class ListingUpdateView(APIView):
             listing.status = Listing.determine_status(listing.starts_at, listing.ends_at)
 
         listing.save()
-
-        after_snapshot = {
-            "title": listing.title,
-            "description": listing.description,
-            "category": listing.category,
-            "starting_price": str(listing.starting_price),
-            "minimum_increment": str(listing.minimum_increment),
-            "starts_at": listing.starts_at.isoformat() if listing.starts_at else None,
-            "ends_at": listing.ends_at.isoformat() if listing.ends_at else None,
-            "status": listing.status,
-        }
-
-        log_action(
-            user=request.user,
-            action="listing_updated",
-            resource_type="Listing",
-            resource_id=listing.id,
-            ip_address=request.META.get("REMOTE_ADDR"),
-            user_agent=request.META.get("HTTP_USER_AGENT", ""),
-            device_fingerprint=_device_fingerprint(request.META.get("REMOTE_ADDR"), request.META.get("HTTP_USER_AGENT", "")),
-            role="staff" if request.user.is_staff else "user",
-            before=before_snapshot,
-            after=after_snapshot,
-            request_method=request.method,
-            endpoint_path=request.path,
-            metadata={"save_as_draft": save_as_draft},
-        )
 
         after_snapshot = {
             "title": listing.title,
@@ -614,53 +610,7 @@ class BidSubmitView(BidImmutableMixin, APIView):
                 status=500,
             )
         # bid_placed audit log is written inside the atomic block in submit_bid
-
-        channel_layer = get_channel_layer()
-        async_to_sync(channel_layer.group_send)(
-            f"auction_{listing_id}",
-            {
-                "type": "bid_update",
-                "data": {
-                    "listing_id": str(listing.id),
-                    "current_highest_bid": str(listing.current_highest_bid),
-                    "anonymous_identifier": bid.anonymous_identifier,
-                    "submitted_at": bid.submitted_at.isoformat(),
-                },
-            },
-        )
-
-        channel_layer = get_channel_layer()
-        async_to_sync(channel_layer.group_send)(
-            f"auction_{listing_id}",
-            {
-                "type": "bid_update",
-                "data": {
-                    "listing_id": str(listing.id),
-                    "current_highest_bid": str(listing.current_highest_bid),
-                    "anonymous_identifier": bid.anonymous_identifier,
-                    "submitted_at": bid.submitted_at.isoformat(),
-                },
-            },
-        )
-
-        # Broadcast to all WebSocket viewers of this listing
-        channel_layer = get_channel_layer()
-        if channel_layer:
-            async_to_sync(channel_layer.group_send)(
-                f"auction_{listing.id}",
-                {
-                    "type": "bid.update",
-                    "data": {
-                        "event": "bid_placed",
-                        "anonymous_identifier": bid.anonymous_identifier,
-                        "amount": str(bid.amount),
-                        "submitted_at": bid.submitted_at.isoformat(),
-                        "is_winning": bid.is_winning,
-                        "current_highest_bid": str(listing.current_highest_bid),
-                        "bid_count": listing.bids.count(),
-                    },
-                },
-            )
+        # WS broadcast is handled by _broadcast_bid inside submit_bid — no extra sends needed.
 
         return Response(
             {

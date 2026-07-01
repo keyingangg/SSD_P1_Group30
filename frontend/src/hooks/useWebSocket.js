@@ -2,9 +2,10 @@ import { useEffect, useRef, useState, useCallback } from "react";
 
 const NON_RETRIABLE_CODES = [4001, 4003, 4004];
 const BASE_RECONNECT_DELAY_MS = 1000;
-const MAX_RECONNECT_DELAY_MS = 5000;
+const MAX_RECONNECT_DELAY_MS = 30000;
+const MAX_RECONNECT_ATTEMPTS = 5;
 
-export function useWebSocket(listingId) {
+export function useWebSocket(path) {
   const [lastMessage, setLastMessage] = useState(null);
   const [readyState, setReadyState] = useState(WebSocket.CLOSED);
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
@@ -36,7 +37,7 @@ export function useWebSocket(listingId) {
   }, [clearReconnectTimer]);
 
   const connect = useCallback(() => {
-    if (!listingId) return;
+    if (!path) return;
     if (!shouldReconnectRef.current) return;
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       setReadyState(WebSocket.CLOSED);
@@ -47,7 +48,9 @@ export function useWebSocket(listingId) {
     setReadyState(WebSocket.CONNECTING);
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const url = `${protocol}//${window.location.host}/ws/auctions/${listingId}/`;
+    // Accept either a full path ("/ws/catalogue/") or a bare listing UUID
+    const wsPath = path.startsWith("/") ? path : `/ws/auctions/${path}/`;
+    const url = `${protocol}//${window.location.host}${wsPath}`;
     const ws = new WebSocket(url);
     socketRef.current = ws;
 
@@ -70,7 +73,7 @@ export function useWebSocket(listingId) {
       socketRef.current = null;
       if (!shouldReconnectRef.current) return;
       if (typeof navigator !== "undefined" && !navigator.onLine) return;
-      if (!NON_RETRIABLE_CODES.includes(e.code)) {
+      if (!NON_RETRIABLE_CODES.includes(e.code) && reconnectAttemptRef.current < MAX_RECONNECT_ATTEMPTS) {
         scheduleReconnect(connect);
       }
     };
@@ -78,7 +81,7 @@ export function useWebSocket(listingId) {
     ws.onerror = () => {
       ws.close();
     };
-  }, [clearReconnectTimer, listingId, scheduleReconnect]);
+  }, [clearReconnectTimer, path, scheduleReconnect]);
 
   useEffect(() => {
     shouldReconnectRef.current = true;
@@ -96,7 +99,7 @@ export function useWebSocket(listingId) {
   }, [clearReconnectTimer, connect]);
 
   useEffect(() => {
-    if (!listingId) return;
+    if (!path) return;
 
     const handleOffline = () => {
       clearReconnectTimer();
@@ -120,12 +123,13 @@ export function useWebSocket(listingId) {
       window.removeEventListener("offline", handleOffline);
       window.removeEventListener("online", handleOnline);
     };
-  }, [clearReconnectTimer, connect, listingId]);
+  }, [clearReconnectTimer, connect, path]);
 
   return {
     lastMessage,
     readyState,
     reconnectAttempt,
     socket: socketRef.current,
+    usingPoll: readyState !== WebSocket.OPEN,
   };
 }

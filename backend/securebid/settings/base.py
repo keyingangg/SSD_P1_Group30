@@ -27,6 +27,7 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "insecure-dev-key-change-me")
 # Applications
 # --------------------------------------------------------------------------
 INSTALLED_APPS = [
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
