@@ -37,8 +37,6 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_email_verified = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
-    is_anonymised = models.BooleanField(default=False)
-    anonymised_at = models.DateTimeField(null=True, blank=True)
 
     objects = UserManager()
 

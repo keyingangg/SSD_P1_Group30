@@ -1,131 +1,65 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 
-const NON_RETRIABLE_CODES = [4001, 4003, 4004];
-const BASE_RECONNECT_DELAY_MS = 1000;
-const MAX_RECONNECT_DELAY_MS = 5000;
+const RECONNECT_DELAYS = [1000, 2000, 4000]; // 3 attempts before falling back
 
-export function useWebSocket(listingId) {
+// path: full WS path, e.g. "/ws/auctions/<id>/" or "/ws/catalogue/"
+export function useWebSocket(path) {
   const [lastMessage, setLastMessage] = useState(null);
-  const [readyState, setReadyState] = useState(WebSocket.CLOSED);
-  const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [usingPoll, setUsingPoll] = useState(false);
   const socketRef = useRef(null);
-  const reconnectTimer = useRef(null);
-  const reconnectAttemptRef = useRef(0);
-  const shouldReconnectRef = useRef(true);
-
-  const clearReconnectTimer = useCallback(() => {
-    if (reconnectTimer.current) {
-      clearTimeout(reconnectTimer.current);
-      reconnectTimer.current = null;
-    }
-  }, []);
-
-  const scheduleReconnect = useCallback((connectFn) => {
-    clearReconnectTimer();
-    reconnectAttemptRef.current += 1;
-    setReconnectAttempt(reconnectAttemptRef.current);
-
-    const delay = Math.min(
-      BASE_RECONNECT_DELAY_MS * 2 ** (reconnectAttemptRef.current - 1),
-      MAX_RECONNECT_DELAY_MS,
-    );
-
-    reconnectTimer.current = setTimeout(() => {
-      connectFn();
-    }, delay);
-  }, [clearReconnectTimer]);
-
-  const connect = useCallback(() => {
-    if (!listingId) return;
-    if (!shouldReconnectRef.current) return;
-    if (typeof navigator !== "undefined" && !navigator.onLine) {
-      setReadyState(WebSocket.CLOSED);
-      return;
-    }
-
-    clearReconnectTimer();
-    setReadyState(WebSocket.CONNECTING);
-
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const url = `${protocol}//${window.location.host}/ws/auctions/${listingId}/`;
-    const ws = new WebSocket(url);
-    socketRef.current = ws;
-
-    ws.onopen = () => {
-      reconnectAttemptRef.current = 0;
-      setReconnectAttempt(0);
-      setReadyState(WebSocket.OPEN);
-    };
-
-    ws.onmessage = (e) => {
-      try {
-        setLastMessage(JSON.parse(e.data));
-      } catch {
-        /* ignore malformed frames */
-      }
-    };
-
-    ws.onclose = (e) => {
-      setReadyState(WebSocket.CLOSED);
-      socketRef.current = null;
-      if (!shouldReconnectRef.current) return;
-      if (typeof navigator !== "undefined" && !navigator.onLine) return;
-      if (!NON_RETRIABLE_CODES.includes(e.code)) {
-        scheduleReconnect(connect);
-      }
-    };
-
-    ws.onerror = () => {
-      ws.close();
-    };
-  }, [clearReconnectTimer, listingId, scheduleReconnect]);
+  const retriesRef = useRef(0);
+  const timerRef = useRef(null);
+  const mountedRef = useRef(true);
 
   useEffect(() => {
-    shouldReconnectRef.current = true;
+    if (!path) return;
+
+    mountedRef.current = true;
+    retriesRef.current = 0;
+    setUsingPoll(false);
+
+    function connect() {
+      if (!mountedRef.current) return;
+
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const host = import.meta.env.VITE_WS_HOST || window.location.host;
+      const ws = new WebSocket(`${protocol}//${host}${path}`);
+      socketRef.current = ws;
+
+      ws.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (mountedRef.current) setLastMessage(data);
+        } catch {
+          // ignore malformed frames
+        }
+      };
+
+      ws.onclose = () => {
+        if (!mountedRef.current) return;
+        if (retriesRef.current < RECONNECT_DELAYS.length) {
+          const delay = RECONNECT_DELAYS[retriesRef.current++];
+          timerRef.current = setTimeout(connect, delay);
+        } else {
+          // All retries exhausted — fall back to REST polling
+          setUsingPoll(true);
+        }
+      };
+
+      ws.onerror = () => ws.close();
+    }
+
     connect();
 
     return () => {
-      shouldReconnectRef.current = false;
-      clearReconnectTimer();
+      mountedRef.current = false;
+      clearTimeout(timerRef.current);
       if (socketRef.current) {
+        socketRef.current.onclose = null; // suppress reconnect on intentional unmount
         socketRef.current.close();
-        socketRef.current = null;
-      }
-      setReadyState(WebSocket.CLOSED);
-    };
-  }, [clearReconnectTimer, connect]);
-
-  useEffect(() => {
-    if (!listingId) return;
-
-    const handleOffline = () => {
-      clearReconnectTimer();
-      setReadyState(WebSocket.CLOSED);
-      if (socketRef.current) {
-        socketRef.current.close();
-        socketRef.current = null;
       }
     };
+  }, [path]);
 
-    const handleOnline = () => {
-      if (!shouldReconnectRef.current) return;
-      if (socketRef.current) return;
-      connect();
-    };
-
-    window.addEventListener("offline", handleOffline);
-    window.addEventListener("online", handleOnline);
-
-    return () => {
-      window.removeEventListener("offline", handleOffline);
-      window.removeEventListener("online", handleOnline);
-    };
-  }, [clearReconnectTimer, connect, listingId]);
-
-  return {
-    lastMessage,
-    readyState,
-    reconnectAttempt,
-    socket: socketRef.current,
-  };
+  return { lastMessage, usingPoll };
 }

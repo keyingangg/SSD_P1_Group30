@@ -16,11 +16,8 @@ function formatSGD(n) {
 }
 
 export default function BidFeed({ listingId, bids: bidsProp, isClosed = false, userHighestBid = 0 }) {
-  const { bids: fetchedBids, readyState } = useBidFeed(bidsProp == null ? listingId : null);
+  const { bids: fetchedBids } = useBidFeed(bidsProp == null ? listingId : null);
   const bids = bidsProp ?? fetchedBids;
-  const liveTransportLabel = readyState === WebSocket.OPEN
-    ? "Live updates via WebSocket"
-    : "WebSocket reconnecting - fallback: REST polling every 5s";
 
   return (
     <div>
@@ -68,7 +65,7 @@ export default function BidFeed({ listingId, bids: bidsProp, isClosed = false, u
 
       {!isClosed && (
         <p className="ld-history-footer">
-          {liveTransportLabel}
+          Live updates via WebSocket · Fallback: REST polling every 5s
         </p>
       )}
     </div>

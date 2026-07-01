@@ -18,11 +18,7 @@ class Order(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     winner = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="orders",
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="orders"
     )
     winning_bid = models.OneToOneField(
         "auctions.Bid", on_delete=models.PROTECT, related_name="order"

@@ -9,7 +9,7 @@ from django.core.exceptions import PermissionDenied
 from django.db import OperationalError, transaction
 from django.utils import timezone
 
-from core.audit import log_action, device_fingerprint as _device_fingerprint
+from core.audit import log_action
 from .models import Bid, Listing
 
 logger = logging.getLogger("securebid")
@@ -114,7 +114,6 @@ def submit_bid(listing_id, user, amount, ip_address=None, user_agent=""):
                 resource_id=bid.id,
                 ip_address=ip_address,
                 user_agent=user_agent,
-                device_fingerprint=_device_fingerprint(ip_address, user_agent),
                 metadata={
                     "listing_id": str(listing.id),
                     "amount": str(bid.amount),
