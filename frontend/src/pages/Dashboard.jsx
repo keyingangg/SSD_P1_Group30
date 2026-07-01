@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { getUserDashboard } from "../api/auctions.js";
 import { useAuth } from "../context/AuthContext.jsx";
+import { useWebSocket } from "../hooks/useWebSocket.js";
 
 function formatSGD(value) {
   const n = Number(value);
@@ -74,23 +75,34 @@ export default function Dashboard() {
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState(0);
 
-  useEffect(() => {
-    let mounted = true;
-    async function load() {
-      try {
-        setLoading(true);
-        setError("");
-        const payload = await getUserDashboard();
-        if (mounted) setData(payload);
-      } catch (err) {
-        if (mounted) setError(err?.response?.data?.detail || "Unable to load dashboard data.");
-      } finally {
-        if (mounted) setLoading(false);
-      }
+  const { lastMessage, usingPoll } = useWebSocket("/ws/catalogue/");
+
+  const load = useCallback(async () => {
+    try {
+      setError("");
+      const payload = await getUserDashboard();
+      setData(payload);
+    } catch (err) {
+      setError(err?.response?.data?.detail || "Unable to load dashboard data.");
     }
-    load();
-    return () => { mounted = false; };
   }, []);
+
+  // Initial load
+  useEffect(() => {
+    setLoading(true);
+    load().finally(() => setLoading(false));
+  }, [load]);
+
+  // Refresh immediately when catalogue changes via WebSocket
+  useEffect(() => {
+    if (lastMessage?.event === "catalogue_changed") load();
+  }, [lastMessage, load]);
+
+  // REST polling fallback — ≤5 s when WebSocket is unavailable, 30 s otherwise
+  useEffect(() => {
+    const id = setInterval(load, usingPoll ? 5000 : 30000);
+    return () => clearInterval(id);
+  }, [usingPoll, load]);
 
   const displayName = user?.display_name || user?.email?.split("@")[0] || "Member";
 

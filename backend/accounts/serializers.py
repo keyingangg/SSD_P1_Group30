@@ -52,6 +52,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "display_name",
             "is_email_verified",
             "is_staff",
+            "is_superuser",
             "created_at",
         ]
         read_only_fields = fields

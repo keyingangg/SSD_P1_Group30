@@ -24,6 +24,9 @@ WS_CLOSE_AUCTION_ENDED = 4005
 WS_CLOSE_RATE_LIMITED = 4029
 
 
+CATALOGUE_GROUP = "catalogue"
+
+
 def _group_name(listing_id: str) -> str:
     """Stable channel group name for a listing."""
     return f"auction_{listing_id}"
@@ -38,6 +41,18 @@ def _get_listing_runtime_status(listing_id: str) -> str | None:
 
     listing.finalize_if_ended()
     return listing.get_runtime_status()
+class CatalogueConsumer(AsyncJsonWebsocketConsumer):
+    """Broadcasts catalogue-level events (new listings, status changes) to all viewers."""
+
+    async def connect(self):
+        await self.channel_layer.group_add(CATALOGUE_GROUP, self.channel_name)
+        await self.accept()
+
+    async def disconnect(self, close_code):
+        await self.channel_layer.group_discard(CATALOGUE_GROUP, self.channel_name)
+
+    async def catalogue_update(self, event):
+        await self.send_json(event["data"])
 
 
 class BidConsumer(AsyncJsonWebsocketConsumer):
@@ -114,5 +129,9 @@ class BidConsumer(AsyncJsonWebsocketConsumer):
         await self.close(code=WS_CLOSE_READ_ONLY)
 
     async def bid_update(self, event):
-        """Relay a group message to this WebSocket client."""
+        """Relay a bid update to this WebSocket client."""
+        await self.send_json(event["data"])
+
+    async def auction_closed(self, event):
+        """Relay an auction-close event (cancelled or ended) to this WebSocket client."""
         await self.send_json(event["data"])

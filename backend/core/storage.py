@@ -1,4 +1,5 @@
 """Supabase Storage helpers for secure upload and serving of uploaded files."""
+import time
 import uuid
 
 from django.conf import settings
@@ -12,6 +13,11 @@ from core.validators import (
 )
 
 _client = None
+
+# In-process cache for signed URLs. Entries expire 2 minutes before the
+# Supabase-side TTL (900 s) so clients never receive an already-expired URL.
+_url_cache: dict[str, tuple[str, float]] = {}
+_URL_CACHE_TTL = 720  # seconds (900 s Supabase TTL minus 3-minute safety margin)
 
 
 def _get_client():
@@ -60,11 +66,21 @@ def get_signed_url(file_path, expires_in=900):
     """Return a signed, short-lived URL for a stored file.
 
     Files live in a private bucket outside the web root and must only be
-    served via signed URLs (default 15-minute expiry).
+    served via signed URLs (default 15-minute expiry). Results are cached
+    in-process so that listing-page loads don't fan out one HTTP call per image.
     """
+    now = time.monotonic()
+    cached = _url_cache.get(file_path)
+    if cached:
+        url, expires_at = cached
+        if now < expires_at:
+            return url
+
     response = (
         _get_client()
         .storage.from_(settings.SUPABASE_STORAGE_BUCKET)
         .create_signed_url(file_path, expires_in)
     )
-    return response["signedURL"]
+    url = response["signedURL"]
+    _url_cache[file_path] = (url, now + _URL_CACHE_TTL)
+    return url

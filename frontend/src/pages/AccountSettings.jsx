@@ -5,7 +5,7 @@ import { getMFAStatus, startMFAEnrol, confirmMFAEnrol, unenrolMFA, deleteAccount
 import { useAuth } from "../context/AuthContext.jsx";
 
 export default function AccountSettings() {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   const [enrolled, setEnrolled] = useState(null);
@@ -388,8 +388,8 @@ export default function AccountSettings() {
         )}
       </section>
 
-      {/* ── Delete Account ────────────────────────────────────────────── */}
-      <section style={{ border: "1px solid #fecaca", borderRadius: 8, padding: "1.5rem", marginTop: "1.5rem" }}>
+      {/* ── Delete Account — hidden for admin/staff accounts ─────────── */}
+      {!user?.is_staff && <section style={{ border: "1px solid #fecaca", borderRadius: 8, padding: "1.5rem", marginTop: "1.5rem" }}>
         <h2 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: ".25rem", color: "#b91c1c" }}>
           Delete Account
         </h2>
@@ -474,7 +474,7 @@ export default function AccountSettings() {
             </div>
           </form>
         )}
-      </section>
+      </section>}
     </main>
   );
 }
