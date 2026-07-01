@@ -33,6 +33,18 @@ from .serializers import (
 _audit_logger = logging.getLogger(__name__)
 
 
+def _unauth_ip_key(group, request):
+    """Rate-limit key for unauthenticated requests only.
+
+    Returns the client IP for anonymous users so the limit applies to them;
+    returns None for authenticated users so django-ratelimit skips the check
+    entirely — authenticated users are already throttled on write actions.
+    """
+    if getattr(request.user, "is_authenticated", False):
+        return None
+    return request.META.get("REMOTE_ADDR", "")
+
+
 class BidImmutableMixin:
     """Reject and log any DELETE or PATCH attempt on bid endpoints (NFSR-IN-05)."""
 
@@ -75,7 +87,7 @@ logger = logging.getLogger("securebid")
 
 
 @method_decorator(
-    ratelimit(key="ip", rate="60/m", method="GET", block=True),
+    ratelimit(key=_unauth_ip_key, rate="30/m", method="GET", block=True),
     name="get",
 )
 class ListingListView(APIView):
@@ -96,6 +108,10 @@ class ListingListView(APIView):
         return Response(serializer.data)
 
 
+@method_decorator(
+    ratelimit(key=_unauth_ip_key, rate="30/m", method="GET", block=True),
+    name="get",
+)
 class ListingDetailView(APIView):
     """View a single published listing's details (public)."""
 

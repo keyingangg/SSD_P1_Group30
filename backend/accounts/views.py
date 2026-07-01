@@ -35,6 +35,7 @@ from .emails import (
     send_password_reset_email,
     send_verification_email,
 )
+from .anonymisation import anonymise_user_data
 from .password import is_password_breached
 
 from .models import (
@@ -837,8 +838,11 @@ class DeleteAccountView(APIView):
             endpoint_path=request.path,
             metadata={"email": email},
         )
-        user.delete()
-        logger.info("User %s deleted their own account", email)
+        # Soft-delete: anonymise PII in-place rather than hard-deleting.
+        # Preserves auction integrity (bids, orders) and audit trail continuity
+        # while satisfying PDPA right-to-erasure within 30 days (NFSR-C-08).
+        anonymise_user_data(user)
+        logger.info("User %s deleted and anonymised their account", email)
         return Response({"detail": "Your account has been deleted."}, status=200)
 
 
@@ -849,7 +853,7 @@ class AdminUserListView(APIView):
     staff_only = True
 
     def get(self, request):
-        qs = User.objects.all().order_by("-created_at")
+        qs = User.objects.filter(is_anonymised=False).order_by("-created_at")
         serializer = AdminUserListSerializer(qs, many=True)
         return Response(serializer.data)
 
@@ -883,6 +887,8 @@ class AdminUserDetailView(APIView):
                 {"detail": "Superuser accounts cannot be modified here."},
                 status=403,
             )
+        if target.is_anonymised:
+            return None, Response({"detail": "User not found."}, status=404)
         return target, None
 
     def patch(self, request, user_id):
@@ -934,8 +940,10 @@ class AdminUserDetailView(APIView):
             endpoint_path=request.path,
             metadata={"target_email": email},
         )
-        target.delete()
-        logger.info("Admin %s deleted account %s", request.user.email, email)
+        # Soft-delete: anonymise PII in-place (NFSR-C-08 · SFR-05c).
+        invalidate_all_user_sessions(target)
+        anonymise_user_data(target)
+        logger.info("Admin %s deleted and anonymised account %s", request.user.email, email)
         return Response({"detail": "Account deleted."}, status=200)
 
 

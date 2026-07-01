@@ -206,7 +206,11 @@ class Bid(models.Model):
         Listing, on_delete=models.CASCADE, related_name="bids"
     )
     bidder = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="bids"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bids",
     )
     # Public-facing anonymised label, e.g. "Bidder #4729".
     anonymous_identifier = models.CharField(max_length=20)
