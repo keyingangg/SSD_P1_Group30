@@ -283,10 +283,12 @@ export default function AdminCreate() {
                 disabled={submitting || uploading}>
                 {uploading ? "Uploading…" : submitting ? "Publishing…" : (isEdit && listingStatus !== "draft" ? "Update Listing" : "Publish Listing")}
               </button>
-              <button type="submit" data-action="draft" className="acf-btn-outline"
-                disabled={submitting || uploading}>
-                Save Draft
-              </button>
+              {(!isEdit || listingStatus === "draft") && (
+                <button type="submit" data-action="draft" className="acf-btn-outline"
+                  disabled={submitting || uploading}>
+                  Save Draft
+                </button>
+              )}
               <button type="button" className="acf-btn-outline"
                 onClick={() => navigate("/admin/listings")}>
                 Cancel

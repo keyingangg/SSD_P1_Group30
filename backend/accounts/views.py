@@ -1134,3 +1134,111 @@ class MFALoginVerifyView(APIView):
             pass
 
         return Response(UserProfileSerializer(user).data, status=200)
+
+
+# ---------------------------------------------------------------------------
+# Audit log
+# ---------------------------------------------------------------------------
+
+_ACTION_LABEL_MAP = {
+    "login_success": "Login successful",
+    "login_failed": "Login failed",
+    "logout": "Logged out",
+    "mfa_login_success": "MFA login successful",
+    "mfa_login_failed": "MFA login failed",
+    "mfa_enrolled": "MFA enrolled",
+    "mfa_disabled": "MFA disabled",
+    "bid_placed": "Bid placed",
+    "bid_rejected": "Bid rejected",
+    "admin_account_toggled": "Account locked/unlocked",
+    "admin_account_deleted": "Account deleted",
+    "admin_listing_status_changed": "Listing status changed",
+    "admin_listing_deleted": "Listing deleted",
+    "ORDER_PAID": "Payment received",
+    "ORDER_FULFILLMENT_UPDATED": "Fulfillment updated",
+    "ORDER_ACCESS_DENIED": "Order access denied",
+    "CHECKOUT_ACCESS_DENIED": "Checkout access denied",
+    "CHECKOUT_INITIATED": "Checkout initiated",
+    "PAYMENT_WINNER_MISMATCH": "Payment winner mismatch",
+    "PAYMENT_CONFIRM_MISMATCH": "Payment confirm mismatch",
+}
+
+_CATEGORY_FILTERS = {
+    "login_logout": lambda qs: qs.filter(
+        action__in=["login_success", "login_failed", "logout",
+                    "mfa_login_success", "mfa_login_failed",
+                    "mfa_enrolled", "mfa_disabled"]
+    ),
+    "bids": lambda qs: qs.filter(action__icontains="bid"),
+    "admin_actions": lambda qs: qs.filter(action__istartswith="admin_"),
+    "payments": lambda qs: qs.filter(
+        action__in=["ORDER_PAID", "ORDER_FULFILLMENT_UPDATED",
+                    "ORDER_ACCESS_DENIED", "CHECKOUT_ACCESS_DENIED",
+                    "CHECKOUT_INITIATED", "PAYMENT_WINNER_MISMATCH",
+                    "PAYMENT_CONFIRM_MISMATCH"]
+    ) | qs.filter(resource_type="Order"),
+    "errors": lambda qs: qs.exclude(exception_type=""),
+}
+
+
+def _severity(entry):
+    action = entry.action.lower()
+    if entry.exception_type or "denied" in action or "error" in action:
+        return "error"
+    if "failed" in action or "rejected" in action or "mismatch" in action:
+        return "warning"
+    if entry.role in ("staff", "superuser", "admin") or action.startswith("admin_"):
+        return "admin"
+    return "success"
+
+
+def _serialize_entry(entry):
+    user = entry.user
+    if user is not None:
+        try:
+            user_display = user.email
+            is_admin = user.is_staff or user.is_superuser
+        except Exception:
+            user_display = "—"
+            is_admin = False
+    else:
+        user_display = "System"
+        is_admin = False
+
+    action_label = _ACTION_LABEL_MAP.get(entry.action, entry.action.replace("_", " ").title())
+    device = entry.device_fingerprint[:12] if entry.device_fingerprint else "—"
+
+    ref = ""
+    if entry.resource_type:
+        ref = entry.resource_type
+        if entry.resource_id:
+            ref += f" {str(entry.resource_id)[:8]}"
+
+    return {
+        "timestamp": entry.timestamp.isoformat(),
+        "user_display": user_display,
+        "is_admin": is_admin,
+        "action_label": action_label,
+        "ip_address": entry.ip_address or "—",
+        "device": device,
+        "ref": ref or "—",
+        "severity": _severity(entry),
+    }
+
+
+class AdminAuditLogView(APIView):
+    """Return audit log entries for the admin panel (staff only)."""
+
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        from core.models import AuditLog
+
+        category = request.query_params.get("category", "all")
+        qs = AuditLog.objects.select_related("user").order_by("-timestamp")
+
+        filter_fn = _CATEGORY_FILTERS.get(category)
+        if filter_fn:
+            qs = filter_fn(qs)
+
+        return Response([_serialize_entry(e) for e in qs[:500]])

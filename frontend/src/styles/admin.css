@@ -760,33 +760,9 @@
 }
 
 .lm-card {
-  background: #f2f9f5;
-  border: 1px solid rgba(79,157,105,.3);
+  background: #F1EFEA;
+  border: 1px solid rgba(27,26,23,.13);
   padding: 1.25rem 1.5rem 1.1rem;
-}
-
-.lm-card-header {
-  margin-bottom: .9rem;
-}
-
-.lm-card-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: .45rem;
-  font-size: .65rem;
-  font-weight: 700;
-  letter-spacing: .12em;
-  color: #2d7a55;
-  text-transform: uppercase;
-}
-
-.lm-live-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #2d7a55;
-  flex-shrink: 0;
-  animation: lm-pulse 1.5s ease-in-out infinite;
 }
 
 .lm-brand {
@@ -794,7 +770,8 @@
   font-weight: 700;
   letter-spacing: .14em;
   text-transform: uppercase;
-  opacity: .45;
+  color: var(--gold-dark, #8a6f2e);
+  opacity: .7;
   margin-bottom: .3rem;
 }
 

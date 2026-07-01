@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import AdminLayout from "../../components/admin/AdminLayout.jsx";
 import axiosClient from "../../api/axiosClient.js";
 import { deleteListing, getListings } from "../../api/auctions.js";
-import { useWebSocket } from "../../hooks/useWebSocket.js";
 import { useWebSocket } from "../../hooks/useWebSocket.js";
 
 const TABS = ["All Lots", "Live", "Scheduled", "Ended", "Draft", "Cancelled"];

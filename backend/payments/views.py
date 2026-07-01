@@ -10,7 +10,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.permissions import IsAdminUser, IsEmailVerified
-from core.audit import get_client_ip, log_action
+from accounts.views import get_client_ip
+from core.audit import log_action
 from core.storage import get_signed_url
 from . import stripe_client
 from .models import Order

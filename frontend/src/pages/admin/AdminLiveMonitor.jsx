@@ -43,13 +43,6 @@ function LiveAuctionCard({ listing }) {
 
   return (
     <div className="lm-card">
-      <div className="lm-card-header">
-        <span className="lm-card-meta">
-          <span className="lm-live-dot" />
-          LOT {shortLot(listing.id)} · LIVE
-        </span>
-      </div>
-
       <p className="lm-brand">{listing.category}</p>
       <h2 className="lm-title">{listing.title}</h2>
 
