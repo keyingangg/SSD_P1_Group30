@@ -122,9 +122,3 @@ export async function deleteAccount({ currentPassword, otpCode }) {
   const { data } = await axiosClient.post("/accounts/delete/", payload);
   return data;
 }
-
-export async function getAuditLog(category = "all") {
-  const params = category !== "all" ? `?category=${category}` : "";
-  const { data } = await axiosClient.get(`/accounts/admin/audit-log/${params}`);
-  return data;
-}

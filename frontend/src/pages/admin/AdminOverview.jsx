@@ -1,92 +1,51 @@
-import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import AdminLayout from "../../components/admin/AdminLayout.jsx";
 import { BRAND } from "../../config/brand.js";
-import { getAdminOverview } from "../../api/auctions.js";
-import { useWebSocket } from "../../hooks/useWebSocket.js";
 
 const SGD = (n) => `S$${Number(n).toLocaleString()}`;
 
-function timeAgo(isoString) {
-  const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
-}
+const STATS = [
+  { label: "Active Listings",   value: "12",     sub: "Currently live",      color: "green"  },
+  { label: "Pending Payments",  value: "3",      sub: "Awaiting checkout",   color: "amber"  },
+  { label: "Bids Today",        value: "47",     sub: "Across all listings", color: ""       },
+  { label: "Registered Users",  value: "48,503", sub: "Total accounts",      color: "purple" },
+];
 
-function timeRemaining(isoString) {
-  if (!isoString) return "";
-  const diff = Math.floor((new Date(isoString).getTime() - Date.now()) / 1000);
-  if (diff <= 0) return null;
-  const d = Math.floor(diff / 86400);
-  const h = Math.floor((diff % 86400) / 3600);
-  const m = Math.floor((diff % 3600) / 60);
-  if (d > 0) return `${d}d ${h}h`;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
+const AUDIT_EVENTS = [
+  { actor: "k***g",  isAdmin: false, action: "Bid placed — LOT 042 — S$19,000",            time: "2m ago"  },
+  { actor: "Admin",  isAdmin: true,  action: "Listing updated — LOT 043",                  time: "5m ago"  },
+  { actor: "m***r",  isAdmin: false, action: "Login successful",                            time: "8m ago"  },
+  { actor: "Admin",  isAdmin: true,  action: "Fulfilment status changed — Order #LXB-0456", time: "12m ago" },
+  { actor: "s***k",  isAdmin: false, action: "Failed login (2/5)",                          time: "18m ago" },
+  { actor: "Admin",  isAdmin: true,  action: "New listing created — LOT 051",               time: "24m ago" },
+  { actor: "p***l",  isAdmin: false, action: "Payment confirmed — S$107,682",               time: "31m ago" },
+  { actor: "a***n",  isAdmin: false, action: "Bid placed — LOT 044 — S$148,000",            time: "45m ago" },
+];
+
+const ACTIVE_AUCTIONS = [
+  { lot: "042", name: "Rolex Submariner",  bid: 18500,  time: "4h 22m", ended: false },
+  { lot: "043", name: "Hermès Birkin 30", bid: 34200,  time: "1d 8h",  ended: false },
+  { lot: "044", name: "Patek Nautilus",   bid: 148000, time: "",        ended: true  },
+  { lot: "046", name: "Bulgari Serpenti", bid: 88000,  time: "3d 12h", ended: false },
+  { lot: "051", name: "AP Royal Oak",     bid: 54000,  time: "6h 50m", ended: false },
+];
 
 export default function AdminOverview() {
-  const [overview, setOverview] = useState(null);
-  const [error, setError] = useState(null);
-
-  const refresh = useCallback(() => {
-    getAdminOverview()
-      .then(setOverview)
-      .catch(() => setError("Failed to load overview data."));
-  }, []);
-
-  // Initial load
-  useEffect(() => { refresh(); }, [refresh]);
-
-  // Catalogue WebSocket — re-fetch immediately when any auction changes
-  const { lastMessage, usingPoll } = useWebSocket("/ws/catalogue/");
-  useEffect(() => {
-    if (lastMessage?.event === "catalogue_changed") refresh();
-  }, [lastMessage, refresh]);
-
-  // While WebSocket is healthy: 30 s heartbeat.
-  // After WebSocket falls back: poll at ≤5 s to satisfy NFR reconnection policy.
-  useEffect(() => {
-    const id = setInterval(refresh, usingPoll ? 5000 : 30000);
-    return () => clearInterval(id);
-  }, [refresh, usingPoll]);
-
-  const stats = overview
-    ? [
-        { label: "Active Listings",  value: String(overview.stats.active_listings),                        sub: "Currently live",      color: "green"  },
-        { label: "Pending Payments", value: String(overview.stats.pending_payments),                       sub: "Awaiting checkout",   color: "amber"  },
-        { label: "Bids Today",       value: String(overview.stats.bids_today),                             sub: "Across all listings", color: ""       },
-        { label: "Registered Users", value: Number(overview.stats.registered_users).toLocaleString(),      sub: "Total accounts",      color: "purple" },
-      ]
-    : [];
-
   return (
     <AdminLayout>
       <p className="admin-eyebrow">{BRAND.name} Admin Panel</p>
       <h1 className="admin-page-title">Admin Overview</h1>
 
-      {error && <p style={{ color: "var(--color-error, red)", marginBottom: "1rem" }}>{error}</p>}
-
       {/* Stat cards */}
       <div className="admin-stats">
-        {overview
-          ? stats.map((s) => (
-              <div key={s.label} className={`admin-stat-card${s.color ? ` ${s.color}` : ""}`}>
-                <p className="admin-stat-label">{s.label}</p>
-                <p className="admin-stat-value">{s.value}</p>
-                <p className="admin-stat-sub">{s.sub}</p>
-              </div>
-            ))
-          : [0, 1, 2, 3].map((i) => (
-              <div key={i} className="admin-stat-card" style={{ opacity: 0.4 }}>
-                <p className="admin-stat-label">—</p>
-                <p className="admin-stat-value">…</p>
-                <p className="admin-stat-sub">Loading</p>
-              </div>
-            ))}
+        {STATS.map((s) => (
+          <div key={s.label} className={`admin-stat-card${s.color ? ` ${s.color}` : ""}`}>
+            <p className="admin-stat-label">{s.label}</p>
+            <p className="admin-stat-value">{s.value}</p>
+            <p className="admin-stat-sub">{s.sub}</p>
+          </div>
+        ))}
       </div>
 
       {/* Two-column grid */}
@@ -95,21 +54,19 @@ export default function AdminOverview() {
         <div className="admin-panel">
           <div className="admin-panel-header">
             <span className="admin-panel-title">Recent Audit Events</span>
+            <span className="admin-panel-sub">NFR-06 · Tamper-evident log</span>
           </div>
           <div className="audit-list">
-            {overview && overview.audit_events.length === 0 && (
-              <p style={{ padding: "1rem", opacity: 0.5 }}>No audit events yet.</p>
-            )}
-            {(overview?.audit_events ?? []).map((e, i) => (
+            {AUDIT_EVENTS.map((e, i) => (
               <div className="audit-row" key={i}>
                 <div className="audit-left">
-                  <span className={`audit-dot${e.is_admin ? " admin" : ""}`} />
+                  <span className={`audit-dot${e.isAdmin ? " admin" : ""}`} />
                   <div>
-                    <p className={`audit-actor${e.is_admin ? " admin-actor" : ""}`}>{e.actor}</p>
+                    <p className={`audit-actor${e.isAdmin ? " admin-actor" : ""}`}>{e.actor}</p>
                     <p className="audit-action">{e.action}</p>
                   </div>
                 </div>
-                <span className="audit-time">{timeAgo(e.timestamp)}</span>
+                <span className="audit-time">{e.time}</span>
               </div>
             ))}
           </div>
@@ -121,45 +78,33 @@ export default function AdminOverview() {
             <span className="admin-panel-title">Active Auctions</span>
           </div>
           <div className="auction-list">
-            {overview && overview.active_auctions.length === 0 && (
-              <p style={{ padding: "1rem", opacity: 0.5 }}>No active auctions.</p>
-            )}
-            {(overview?.active_auctions ?? []).map((a) => {
-              const remaining = timeRemaining(a.ends_at);
-              const ended = remaining === null;
-              return (
-                <div className="auction-row" key={a.id}>
-                  <div>
-                    <p className="auction-lot">Lot {a.lot}</p>
-                    <p className="auction-name">{a.name}</p>
-                    <p className="auction-bid">{SGD(a.bid)}</p>
-                  </div>
-                  <span className={`auction-time${ended ? " ended" : ""}`}>
-                    {ended ? "ENDED" : remaining}
-                  </span>
+            {ACTIVE_AUCTIONS.map((a) => (
+              <div className="auction-row" key={a.lot}>
+                <div>
+                  <p className="auction-lot">Listing {a.lot}</p>
+                  <p className="auction-name">{a.name}</p>
+                  <p className="auction-bid">{SGD(a.bid)}</p>
                 </div>
-              );
-            })}
+                <span className={`auction-time${a.ended ? " ended" : ""}`}>
+                  {a.ended ? "ENDED" : a.time}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Alert bar — only shown when there are pending payments */}
-      {overview && overview.pending_orders_count > 0 && (
-        <div className="admin-alert">
-          <div className="admin-alert-left">
-            <span className="admin-alert-dot" />
-            <p className="admin-alert-text">
-              {overview.pending_orders_count}{" "}
-              {overview.pending_orders_count === 1 ? "order has" : "orders have"} pending
-              payments — winners have been notified.
-            </p>
-          </div>
-          <Link to="/admin/orders" className="admin-alert-btn">
-            View Orders
-          </Link>
+      {/* Alert bar */}
+      <div className="admin-alert">
+        <div className="admin-alert-left">
+          <span className="admin-alert-dot" />
+          <p className="admin-alert-text">
+            3 orders have pending payments — winners have been notified.
+            Payment deadline approaching for Order #LXB-2024-0456 (expires in 2h 18m).
+          </p>
         </div>
-      )}
+        <Link to="/admin/orders" className="admin-alert-btn">View Orders</Link>
+      </div>
     </AdminLayout>
   );
 }

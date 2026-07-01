@@ -41,7 +41,6 @@ urlpatterns = [
     path("mfa/verify-login/", views.MFALoginVerifyView.as_view(), name="mfa-verify-login"),
     path("staff/invite/", views.StaffInviteView.as_view(), name="staff-invite"),
     path("staff/accept-invite/", views.AcceptInviteView.as_view(), name="accept-invite"),
-    path("admin/audit-log/", views.AdminAuditLogView.as_view(), name="admin-audit-log"),
     path("admin/users/", views.AdminUserListView.as_view(), name="admin-user-list"),
     path(
         "admin/users/<uuid:user_id>/",

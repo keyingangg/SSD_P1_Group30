@@ -50,7 +50,6 @@ SECURE_HSTS_SECONDS = 31536000 if _ssl else 0
 SECURE_HSTS_INCLUDE_SUBDOMAINS = _ssl
 SECURE_HSTS_PRELOAD = _ssl
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https") if _ssl else None
-USE_X_FORWARDED_HOST = True
 
 # Cookies are only marked Secure when actually served over HTTPS. A
 

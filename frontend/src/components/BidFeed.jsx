@@ -15,13 +15,6 @@ function formatSGD(n) {
   return `S$${Number(n).toLocaleString("en-SG", { minimumFractionDigits: 0 })}`;
 }
 
-function maskBidder(id) {
-  if (!id) return "—";
-  const code = id.replace(/^Bidder\s*#?/i, "").trim() || id;
-  if (code.length <= 1) return code + "***";
-  return code[0] + "***" + code[code.length - 1];
-}
-
 export default function BidFeed({ listingId, bids: bidsProp, isClosed = false, userHighestBid = 0 }) {
   const { bids: fetchedBids, readyState } = useBidFeed(bidsProp == null ? listingId : null);
   const bids = bidsProp ?? fetchedBids;
@@ -57,7 +50,7 @@ export default function BidFeed({ listingId, bids: bidsProp, isClosed = false, u
                 <span className={`ld-bid-row-rank${isTop ? " top" : ""}`}>
                   #{bids.length - i}
                 </span>
-                <span className={`ld-bid-row-name${isYourBid ? " yours" : ""}`}>{maskBidder(bid.anonymous_identifier ?? bid.bidder)}</span>
+                <span className={`ld-bid-row-name${isYourBid ? " yours" : ""}`}>{bid.anonymous_identifier ?? bid.bidder ?? "—"}</span>
                 {isWinner && <span className="ld-bid-row-badge ld-bid-row-badge--winner">WINNER</span>}
                 {isHighest && <span className="ld-bid-row-badge ld-bid-row-badge--highest">Highest</span>}
                 {isYourBid && <span className="ld-bid-row-badge ld-bid-row-badge--yours">YOUR BID</span>}

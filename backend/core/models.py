@@ -42,7 +42,6 @@ class AuditLog(models.Model):
     class Meta:
         db_table = "audit_logs"
         default_permissions = ("add", "view")
-        ordering = ["-timestamp"]
 
     def __str__(self):
         return f"{self.action} @ {self.timestamp}"
