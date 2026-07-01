@@ -46,7 +46,7 @@ export default function ListingDetail() {
     const saved = localStorage.getItem(storageKey);
     return saved ? Number(saved) : null;
   });
-  const { bids } = useBidFeed(id);
+  const { bids, isPolling } = useBidFeed(id);
 
   async function refreshListing() {
     const data = await getListingDetail(id);
@@ -105,7 +105,14 @@ export default function ListingDetail() {
       (Number.isFinite(startsAtMs) && Number.isFinite(endsAtMs) && startsAtMs <= nowMs && nowMs < endsAtMs));
 
   const category = listing?.category || null;
-  const currentBid = listing?.current_highest_bid || listing?.starting_price;
+  const latestLiveBidAmount = Number(bids[0]?.amount);
+  const hasLatestLiveBid = Number.isFinite(latestLiveBidAmount) && latestLiveBidAmount > 0;
+  const currentBid = hasLatestLiveBid
+    ? latestLiveBidAmount
+    : (listing?.current_highest_bid || listing?.starting_price);
+  const listingForBidForm = listing
+    ? { ...listing, current_highest_bid: currentBid }
+    : listing;
 
   // Closed-state user context — populated if the backend returns these fields
   const userWon = listing?.user_won === true;
@@ -115,6 +122,8 @@ export default function ListingDetail() {
   const winnerDiff = userParticipated && !userWon && currentBid
     ? Number(currentBid) - userHighestBid
     : 0;
+
+  const transportStatus = isPolling ? "Offline" : "";
 
   return (
     <main className="ld-page">
@@ -310,8 +319,12 @@ export default function ListingDetail() {
                             <span className="ld-status-dot" />
                             Auction Live
                           </span>
-                          <span className="ld-status-sep">·</span>
-                          <span className="ld-status-info" style={{ color: "#3a7d55" }}>WebSocket connected</span>
+                          {transportStatus && (
+                            <>
+                              <span className="ld-status-sep">·</span>
+                              <span className="ld-status-info" style={{ color: "#7b5c00" }}>{transportStatus}</span>
+                            </>
+                          )}
                         </>
                       ) : (
                         <>
@@ -368,7 +381,7 @@ export default function ListingDetail() {
                           <div className="ld-panel-section">
                             <BidForm
                               listingId={id}
-                              listing={listing}
+                              listing={listingForBidForm}
                               onBidPlaced={(amt) => { setRejectedMinBid(null); setConflictMinBid(null); handleBidPlaced(amt); }}
                               onBidRejected={(minBid) => { setConflictMinBid(null); setRejectedMinBid(minBid); }}
                               onBidConflict={(minBid) => { setRejectedMinBid(null); setConflictMinBid(minBid); refreshListing(); }}
