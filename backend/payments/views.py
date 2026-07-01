@@ -10,6 +10,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.permissions import IsAdminUser, IsEmailVerified
+from accounts.views import get_client_ip
 from core.audit import log_action
 from core.storage import get_signed_url
 from . import stripe_client
@@ -53,14 +54,14 @@ class CreatePaymentIntentView(APIView):
                 "Checkout access denied for user=%s order=%s ip=%s",
                 request.user.email,
                 order_id,
-                request.META.get("REMOTE_ADDR", ""),
+                get_client_ip(request),
             )
             log_action(
                 user=request.user,
                 action="CHECKOUT_ACCESS_DENIED",
                 resource_type="Order",
                 resource_id=order.id,
-                ip_address=request.META.get("REMOTE_ADDR", ""),
+                ip_address=get_client_ip(request),
                 user_agent=request.META.get("HTTP_USER_AGENT", ""),
                 metadata={"requested_by": str(request.user.id), "security_event": True},
             )
@@ -301,7 +302,7 @@ class OrderDetailView(APIView):
                 "Order access denied for user=%s order=%s ip=%s agent=%s",
                 request.user.email,
                 order_id,
-                request.META.get("REMOTE_ADDR", ""),
+                get_client_ip(request),
                 request.META.get("HTTP_USER_AGENT", ""),
             )
             log_action(
@@ -309,7 +310,7 @@ class OrderDetailView(APIView):
                 action="ORDER_ACCESS_DENIED",
                 resource_type="Order",
                 resource_id=order.id,
-                ip_address=request.META.get("REMOTE_ADDR", ""),
+                ip_address=get_client_ip(request),
                 user_agent=request.META.get("HTTP_USER_AGENT", ""),
                 metadata={"requested_by": str(request.user.id)},
             )
@@ -362,7 +363,7 @@ class ConfirmPaymentView(APIView):
         if order.winner_id != request.user.id:
             logger.warning(
                 "ConfirmPayment access denied user=%s order=%s ip=%s",
-                request.user.email, order_id, request.META.get("REMOTE_ADDR", ""),
+                request.user.email, order_id, get_client_ip(request),
             )
             return Response({"detail": "Forbidden."}, status=403)
 
@@ -399,7 +400,7 @@ class ConfirmPaymentView(APIView):
                     action="PAYMENT_CONFIRM_MISMATCH",
                     resource_type="Order",
                     resource_id=order.id,
-                    ip_address=request.META.get("REMOTE_ADDR", ""),
+                    ip_address=get_client_ip(request),
                     metadata={"payment_intent": payment_intent_id, "security_event": True},
                 )
                 return Response({"detail": "Payment does not match this order."}, status=400)
@@ -414,7 +415,7 @@ class ConfirmPaymentView(APIView):
             action="ORDER_PAID",
             resource_type="Order",
             resource_id=order.id,
-            ip_address=request.META.get("REMOTE_ADDR", ""),
+            ip_address=get_client_ip(request),
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
             metadata={"payment_intent": payment_intent_id, "source": "direct_confirm"},
         )
@@ -464,7 +465,7 @@ class UpdateFulfillmentView(APIView):
             action="ORDER_FULFILLMENT_UPDATED",
             resource_type="Order",
             resource_id=order.id,
-            ip_address=request.META.get("REMOTE_ADDR", ""),
+            ip_address=get_client_ip(request),
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
             metadata={"fulfillment_status": new_status},
         )

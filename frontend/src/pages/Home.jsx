@@ -2,6 +2,18 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { getListings } from "../api/auctions.js";
 import AuctionCard from "../components/AuctionCard.jsx";
+import { useWebSocket } from "../hooks/useWebSocket.js";
+
+function runtimeStatus(l) {
+  const s = String(l.status || "").toLowerCase();
+  if (s === "draft" || s === "cancelled") return s;
+  const now = Date.now();
+  const start = l.starts_at ? new Date(l.starts_at).getTime() : NaN;
+  const end = l.ends_at ? new Date(l.ends_at).getTime() : NaN;
+  if (!isNaN(end) && now >= end) return "ended";
+  if (!isNaN(start) && now >= start) return "active";
+  return "scheduled";
+}
 
 const FILTER_TABS = [
   "All Lots",
@@ -64,16 +76,34 @@ export default function Home() {
     };
   });
 
+  const { lastMessage, usingPoll } = useWebSocket("/ws/catalogue/");
+
+  // Initial load
   useEffect(() => {
     getListings().then(setListings).catch(console.error).finally(() => setLoading(false));
   }, []);
+
+  // Refresh when WebSocket broadcasts a catalogue change
+  useEffect(() => {
+    if (!lastMessage) return;
+    getListings().then(setListings).catch(() => {});
+  }, [lastMessage]);
+
+  // Fall back to 5s polling if WebSocket is unavailable
+  useEffect(() => {
+    if (!usingPoll) return;
+    const interval = setInterval(() => {
+      getListings().then(setListings).catch(() => {});
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [usingPoll]);
 
   const visible = listings.filter((l) => {
     if (search && !l.title.toLowerCase().includes(search.toLowerCase())) return false;
 
     if (sideFilters.STATUS) {
       const statusMap = { "Live Now": "active", "Scheduled": "scheduled", "Ended": "ended" };
-      if (l.status !== statusMap[sideFilters.STATUS]) return false;
+      if (runtimeStatus(l) !== statusMap[sideFilters.STATUS]) return false;
     }
 
     if (sideFilters.CATEGORY && l.category !== sideFilters.CATEGORY) return false;

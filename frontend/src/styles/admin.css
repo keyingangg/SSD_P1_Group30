@@ -653,6 +653,8 @@
   margin-bottom: .15rem;
 }
 .al-item-name { font-size: .85rem; font-weight: 500; color: var(--ink); }
+.al-item-link { text-decoration: none; }
+.al-item-link:hover { color: var(--gold-dark); text-decoration: underline; }
 .al-category { font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; opacity: .6; }
 .al-bid { font-family: var(--font-serif); font-weight: 700; color: var(--gold-dark); }
 .al-date { font-size: .8rem; opacity: .65; white-space: nowrap; }
@@ -702,4 +704,380 @@
 .al-legend-dot {
   width: 7px; height: 7px;
   border-radius: 50%; flex-shrink: 0;
+}
+
+/* ── Live Monitor ─────────────────────────────────────────────────────── */
+
+.lm-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid rgba(27,26,23,.1);
+}
+
+.lm-page-title {
+  font-family: var(--font-serif);
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.lm-live-badge {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  color: #2d7a55;
+}
+
+.lm-live-badge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2d7a55;
+  animation: lm-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes lm-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .35; }
+}
+
+.lm-empty {
+  font-size: .9rem;
+  opacity: .4;
+  padding: 2rem 0;
+}
+
+.lm-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.25rem;
+}
+
+.lm-card {
+  background: #F1EFEA;
+  border: 1px solid rgba(27,26,23,.13);
+  padding: 1.25rem 1.5rem 1.1rem;
+}
+
+.lm-brand {
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--gold-dark, #8a6f2e);
+  opacity: .7;
+  margin-bottom: .3rem;
+}
+
+.lm-title {
+  font-family: var(--font-serif);
+  font-size: 1.3rem;
+  font-weight: 700;
+  line-height: 1.25;
+  margin-bottom: .9rem;
+  color: var(--ink);
+}
+
+.lm-divider {
+  border: none;
+  border-top: 1px solid rgba(27,26,23,.13);
+  margin-bottom: .85rem;
+}
+
+.lm-stats-row {
+  display: grid;
+  grid-template-columns: 1.7fr 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: .85rem;
+}
+
+.lm-stat-label {
+  font-size: .6rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  opacity: .4;
+  margin-bottom: .3rem;
+}
+
+.lm-stat-bid {
+  font-family: var(--font-serif);
+  font-size: 1.55rem;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: .2rem;
+  color: var(--ink);
+}
+
+.lm-stat-next {
+  font-size: .7rem;
+  opacity: .5;
+}
+
+.lm-stat-num {
+  font-family: var(--font-serif);
+  font-size: 1.55rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.lm-stat-time {
+  font-family: var(--font-serif);
+  font-size: 1.55rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--gold-dark);
+}
+
+.lm-stat-time.ended {
+  font-size: 1rem;
+  letter-spacing: .06em;
+  color: rgba(27,26,23,.35);
+}
+
+.lm-bids {
+  border-top: 1px solid rgba(27,26,23,.09);
+  padding-top: .7rem;
+}
+
+.lm-bids-label {
+  font-size: .6rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  opacity: .4;
+  margin-bottom: .45rem;
+}
+
+.lm-bids-empty {
+  font-size: .78rem;
+  opacity: .35;
+  padding: .2rem 0;
+}
+
+.lm-bid-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: .28rem 0;
+  font-size: .8rem;
+}
+
+.lm-bid-name {
+  font-weight: 600;
+  min-width: 54px;
+}
+
+.lm-bid-amount {
+  font-family: var(--font-serif);
+  font-weight: 700;
+  flex: 1;
+}
+
+.lm-bid-time {
+  font-size: .7rem;
+  opacity: .38;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .lm-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Security Audit Log (/admin/audit-log) ─────────────────────────────── */
+
+.sal-title {
+  font-size: 1.65rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 1.25rem;
+  letter-spacing: -.015em;
+  font-family: var(--font-serif);
+}
+
+/* Tab row */
+.sal-tabs-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0;
+  flex-wrap: wrap;
+  padding-bottom: 1px;
+}
+
+.sal-tabs {
+  display: flex;
+  gap: .5rem;
+  flex-wrap: wrap;
+}
+
+.sal-tab {
+  padding: .5rem 1.1rem;
+  font-size: .78rem;
+  font-weight: 500;
+  border: 1px solid rgba(27, 26, 23, .15);
+  border-radius: 0;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background .1s, color .1s;
+  font-family: var(--font-sans, inherit);
+}
+.sal-tab:hover:not(.active) {
+  background: rgba(27, 26, 23, .04);
+}
+.sal-tab.active {
+  background: #7F5B1C;
+  color: #fff;
+  border-color: #7F5B1C;
+}
+
+.sal-export-btn {
+  padding: .5rem 1.1rem;
+  font-size: .78rem;
+  font-weight: 500;
+  border: 1px solid rgba(27, 26, 23, .18);
+  border-radius: 0;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .1s;
+  font-family: var(--font-sans, inherit);
+}
+.sal-export-btn:hover:not(:disabled) {
+  background: rgba(27, 26, 23, .04);
+}
+.sal-export-btn:disabled {
+  opacity: .35;
+  cursor: default;
+}
+
+/* Table */
+.sal-table-wrap {
+  overflow-x: auto;
+  background: #fff;
+  margin-top: 1rem;
+}
+
+.sal-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .82rem;
+}
+
+/* Column header row */
+.sal-table thead tr {
+  border-top: 1px solid rgba(27, 26, 23, .12);
+  border-bottom: 1px solid rgba(27, 26, 23, .12);
+  background: #fff;
+}
+
+.sal-table th {
+  padding: .6rem 1.25rem;
+  text-align: left;
+  font-size: .68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: rgba(27, 26, 23, .42);
+  white-space: nowrap;
+  font-family: var(--font-sans, inherit);
+}
+
+/* Body rows — alternating shading matching screenshot */
+.sal-table tbody tr {
+  border-bottom: 1px solid rgba(27, 26, 23, .07);
+  transition: background .08s;
+  background: #fff;
+}
+.sal-table tbody tr:nth-child(even) {
+  background: #f5f3ee;
+}
+.sal-table tbody tr:hover {
+  background: rgba(194, 161, 90, .07);
+}
+
+.sal-table td {
+  padding: 1rem 1.25rem;
+  vertical-align: middle;
+}
+
+/* Timestamp */
+.sal-ts {
+  font-size: .78rem;
+  color: rgba(27, 26, 23, .5);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* User / Role cell */
+.sal-admin-badge {
+  display: inline-block;
+  padding: .2rem .6rem;
+  border-radius: 0;
+  background: rgba(107, 79, 187, .15);
+  color: #5b43a8;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+
+.sal-user-name {
+  font-size: .82rem;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.sal-role-label {
+  font-size: .63rem;
+  font-weight: 600;
+  letter-spacing: .1em;
+  color: rgba(27, 26, 23, .35);
+}
+
+/* Action cell */
+.sal-action-cell {
+  display: flex;
+  align-items: flex-start;
+  gap: .6rem;
+}
+
+.sal-action-text {
+  color: var(--ink);
+  line-height: 1.45;
+  font-size: .82rem;
+}
+
+/* IP / Device */
+.sal-ip,
+.sal-device {
+  font-size: .8rem;
+  color: rgba(27, 26, 23, .55);
+  white-space: nowrap;
+}
+
+/* Ref */
+.sal-ref {
+  font-size: .74rem;
+  font-weight: 700;
+  letter-spacing: .07em;
+  color: var(--gold-dark);
+  white-space: nowrap;
+}
+
+/* Empty / loading state */
+.sal-empty {
+  text-align: center;
+  padding: 2.5rem 1rem;
+  color: rgba(27, 26, 23, .4);
+  font-size: .85rem;
 }

@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import AdminLayout from "../../components/admin/AdminLayout.jsx";
 import axiosClient from "../../api/axiosClient.js";
 import { deleteListing, getListings } from "../../api/auctions.js";
+import { useWebSocket } from "../../hooks/useWebSocket.js";
 
 const TABS = ["All Lots", "Live", "Scheduled", "Ended", "Draft", "Cancelled"];
 
@@ -28,8 +29,19 @@ function fmtSGD(val) {
   return `S$${n.toLocaleString("en-SG")}`;
 }
 
-function StatusBadge({ status }) {
-  const s = String(status || "").toLowerCase();
+function runtimeStatus(l) {
+  const s = String(l.status || "").toLowerCase();
+  if (s === "draft" || s === "cancelled") return s;
+  const now = Date.now();
+  const start = l.starts_at ? new Date(l.starts_at).getTime() : NaN;
+  const end = l.ends_at ? new Date(l.ends_at).getTime() : NaN;
+  if (!isNaN(end) && now >= end) return "ended";
+  if (!isNaN(start) && now >= start) return "active";
+  return "scheduled";
+}
+
+function StatusBadge({ listing }) {
+  const s = runtimeStatus(listing);
   const map = {
     active: ["al-badge al-badge--live", "LIVE"],
     ended: ["al-badge al-badge--ended", "ENDED"],
@@ -48,15 +60,30 @@ export default function AdminListings() {
   const [tab, setTab] = useState("All Lots");
   const navigate = useNavigate();
 
-  const load = async () => {
-    setLoading(true);
+  const { lastMessage, usingPoll } = useWebSocket("/ws/catalogue/");
+
+  const load = useCallback(async () => {
     setError(null);
     try { setListings(await getListings()); }
     catch { setError("Could not load listings. Please refresh."); }
-    finally { setLoading(false); }
-  };
+  }, []);
 
-  useEffect(() => { load(); }, []);
+  // Initial load
+  useEffect(() => {
+    setLoading(true);
+    load().finally(() => setLoading(false));
+  }, [load]);
+
+  // Refresh immediately when catalogue changes via WebSocket
+  useEffect(() => {
+    if (lastMessage?.event === "catalogue_changed") load();
+  }, [lastMessage, load]);
+
+  // REST polling fallback — ≤5 s when WebSocket is unavailable, 30 s otherwise
+  useEffect(() => {
+    const id = setInterval(load, usingPoll ? 5000 : 30000);
+    return () => clearInterval(id);
+  }, [usingPoll, load]);
 
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this listing? This cannot be undone.")) return;
@@ -80,10 +107,10 @@ export default function AdminListings() {
 
   const filtered = listings.filter(l => {
     if (tab === "All Lots") return true;
-    return String(l.status).toLowerCase() === TAB_STATUS[tab];
+    return runtimeStatus(l) === TAB_STATUS[tab];
   });
 
-  const isLocked = (l) => l.status === "active";
+  const isLocked = (l) => runtimeStatus(l) === "active";
 
   return (
     <AdminLayout>
@@ -140,7 +167,7 @@ export default function AdminListings() {
                         </div>
                         <div>
                           <p className="al-lot-num">LOT {String(i + 1).padStart(3, "0")}</p>
-                          <p className="al-item-name">{l.title}</p>
+                          <Link to={`/listings/${l.id}`} className="al-item-name al-item-link">{l.title}</Link>
                         </div>
                       </div>
                     </td>
@@ -155,11 +182,11 @@ export default function AdminListings() {
                     {/* Bid count */}
                     <td className="al-bids">{l.bid_count ?? "—"}</td>
                     {/* Status */}
-                    <td><StatusBadge status={l.status} /></td>
+                    <td><StatusBadge listing={l} /></td>
                     {/* Actions */}
                     <td>
                       <div className="al-actions">
-                        {(l.status === "ended" || l.status === "cancelled") ? null : isLocked(l) ? (
+                        {(runtimeStatus(l) === "ended" || runtimeStatus(l) === "cancelled") ? null : isLocked(l) ? (
                           <>
                             <p className="al-locked-note">Active bids — core edit locked</p>
                             <div className="al-action-btns">
