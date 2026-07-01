@@ -8,7 +8,10 @@ import logging
 import time
 from collections import defaultdict
 
+from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
+
+from .models import Listing
 
 logger = logging.getLogger("securebid")
 
@@ -17,12 +20,24 @@ WS_CLOSE_UNAUTHENTICATED = 4001
 WS_CLOSE_READ_ONLY = 4002
 WS_CLOSE_EMAIL_UNVERIFIED = 4003
 WS_CLOSE_ORIGIN_REJECTED = 4004
+WS_CLOSE_AUCTION_ENDED = 4005
 WS_CLOSE_RATE_LIMITED = 4029
 
 
 def _group_name(listing_id: str) -> str:
     """Stable channel group name for a listing."""
     return f"auction_{listing_id}"
+
+
+@database_sync_to_async
+def _get_listing_runtime_status(listing_id: str) -> str | None:
+    try:
+        listing = Listing.objects.get(pk=listing_id)
+    except Listing.DoesNotExist:
+        return None
+
+    listing.finalize_if_ended()
+    return listing.get_runtime_status()
 
 
 class BidConsumer(AsyncJsonWebsocketConsumer):
@@ -74,6 +89,17 @@ class BidConsumer(AsyncJsonWebsocketConsumer):
             return
 
         self.listing_id = str(self.scope["url_route"]["kwargs"]["listing_id"])
+        runtime_status = await _get_listing_runtime_status(self.listing_id)
+        if runtime_status in {None, "ended", "cancelled", "draft"}:
+            logger.info(
+                "WebSocket connect denied: inactive listing=%s status=%s",
+                self.listing_id,
+                runtime_status,
+            )
+            await self.accept()
+            await self.close(code=WS_CLOSE_AUCTION_ENDED)
+            return
+
         self.group = _group_name(self.listing_id)
 
         await self.channel_layer.group_add(self.group, self.channel_name)

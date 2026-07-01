@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { getListingDetail } from "../api/auctions.js";
@@ -41,6 +41,8 @@ export default function ListingDetail() {
   const [error, setError] = useState("");
   const [rejectedMinBid, setRejectedMinBid] = useState(null);
   const [conflictMinBid, setConflictMinBid] = useState(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const closeSyncRef = useRef(false);
   const storageKey = `bid_placed_${id}`;
   const [lastPlacedBid, setLastPlacedBid] = useState(() => {
     const saved = localStorage.getItem(storageKey);
@@ -48,10 +50,11 @@ export default function ListingDetail() {
   });
   const { bids, isPolling } = useBidFeed(id);
 
-  async function refreshListing() {
+  const refreshListing = useCallback(async () => {
     const data = await getListingDetail(id);
     setListing(data);
-  }
+    return data;
+  }, [id]);
 
   function handleBidPlaced(amount) {
     localStorage.setItem(storageKey, amount);
@@ -75,7 +78,7 @@ export default function ListingDetail() {
       setLoading(true);
       setError("");
       try {
-        const data = await getListingDetail(id);
+        const data = await refreshListing();
         if (active) setListing(data);
       } catch (err) {
         if (!active) return;
@@ -86,11 +89,18 @@ export default function ListingDetail() {
     }
     load();
     return () => { active = false; };
-  }, [id]);
+  }, [id, refreshListing]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   const runtimeStatus = String(listing?.status || "").toLowerCase();
   const displayStatus = String(listing?.display_status || "").toLowerCase();
-  const nowMs = Date.now();
   const startsAtMs = listing?.starts_at ? new Date(listing.starts_at).getTime() : NaN;
   const endsAtMs = listing?.ends_at ? new Date(listing.ends_at).getTime() : NaN;
 
@@ -124,6 +134,49 @@ export default function ListingDetail() {
     : 0;
 
   const transportStatus = isPolling ? "Offline" : "";
+
+  useEffect(() => {
+    if (!Number.isFinite(endsAtMs)) {
+      closeSyncRef.current = false;
+      return;
+    }
+
+    if (nowMs < endsAtMs) {
+      closeSyncRef.current = false;
+      return;
+    }
+
+    if (closeSyncRef.current) return;
+    if (runtimeStatus === "ended" || runtimeStatus === "cancelled") {
+      closeSyncRef.current = true;
+      return;
+    }
+
+    closeSyncRef.current = true;
+    refreshListing().catch(() => {
+      closeSyncRef.current = false;
+    });
+  }, [endsAtMs, nowMs, refreshListing, runtimeStatus]);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      refreshListing().catch(() => {
+        /* keep existing UI until next successful sync */
+      });
+    };
+
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
+  }, [refreshListing]);
+
+  useEffect(() => {
+    if (!isClosed) return;
+
+    localStorage.removeItem(storageKey);
+    setLastPlacedBid(null);
+    setRejectedMinBid(null);
+    setConflictMinBid(null);
+  }, [isClosed, storageKey]);
 
   return (
     <main className="ld-page">

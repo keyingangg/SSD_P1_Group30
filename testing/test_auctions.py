@@ -1,10 +1,13 @@
 """Feature tests for the auctions endpoints."""
+import asyncio
 from datetime import timedelta
 
 import pytest
+from channels.testing import WebsocketCommunicator
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
+from auctions.consumers import BidConsumer, WS_CLOSE_AUCTION_ENDED
 from auctions.models import Bid, Listing
 from payments.models import Order
 
@@ -280,6 +283,80 @@ def test_submit_bid_rejects_consecutive_bids_from_same_user(auth_client, verifie
 
     assert second_resp.status_code == 400
     assert "consecutive bids" in second_resp.json()["detail"]
+
+
+@pytest.mark.django_db
+def test_submit_bid_rejects_ended_auction(auth_client):
+    now = timezone.now()
+    seller = User.objects.create_user(
+        email="seller5@example.com",
+        display_name="Seller 5",
+        password="StrongPass123!",
+        is_active=True,
+        is_email_verified=True,
+    )
+    listing = Listing.objects.create(
+        created_by=seller,
+        title="Ended Camera",
+        description="Auction already ended",
+        image_key="",
+        category="Others",
+        starting_price="400.00",
+        current_highest_bid="450.00",
+        minimum_increment="10.00",
+        starts_at=now - timedelta(hours=3),
+        ends_at=now - timedelta(minutes=1),
+        status="active",
+    )
+
+    resp = auth_client.post(
+        f"/api/auctions/{listing.id}/bid/",
+        {"amount": "460.00"},
+        format="json",
+    )
+
+    assert resp.status_code == 400
+    assert "active auctions" in resp.json()["detail"]
+
+    listing.refresh_from_db()
+    assert listing.status == "ended"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_websocket_reconnect_is_rejected_after_auction_end(verified_user, admin_user):
+    now = timezone.now()
+    listing = Listing.objects.create(
+        created_by=admin_user,
+        title="Reconnect Closed Auction",
+        description="Auction ended before websocket reconnect",
+        image_key="",
+        category="Others",
+        starting_price="250.00",
+        current_highest_bid="300.00",
+        minimum_increment="10.00",
+        starts_at=now - timedelta(hours=2),
+        ends_at=now - timedelta(seconds=1),
+        status="active",
+    )
+
+    async def attempt_reconnect():
+        communicator = WebsocketCommunicator(BidConsumer.as_asgi(), f"/ws/auctions/{listing.id}/")
+        communicator.scope["user"] = verified_user
+        communicator.scope["url_route"] = {"kwargs": {"listing_id": str(listing.id)}}
+
+        try:
+            connected, _ = await communicator.connect()
+            close_event = await communicator.receive_output(1)
+            return connected, close_event
+        finally:
+            await communicator.wait()
+
+    connected, close_event = asyncio.run(attempt_reconnect())
+    assert connected is True
+    assert close_event == {"type": "websocket.close", "code": WS_CLOSE_AUCTION_ENDED}
+
+    listing.refresh_from_db()
+    assert listing.status == "ended"
 
 
 @pytest.mark.django_db

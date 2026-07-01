@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 
-const NON_RETRIABLE_CODES = [4001, 4003, 4004];
+const NON_RETRIABLE_CODES = [4001, 4003, 4004, 4005];
 const BASE_RECONNECT_DELAY_MS = 1000;
 const MAX_RECONNECT_DELAY_MS = 5000;
 
