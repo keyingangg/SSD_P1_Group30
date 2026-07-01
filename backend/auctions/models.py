@@ -140,6 +140,25 @@ class Listing(models.Model):
             fields_to_update.append("updated_at")
             self.save(update_fields=fields_to_update)
 
+        # Log winner selection exactly once, when the winner field is first set.
+        if fields_to_update and "winner" in fields_to_update and winning_bid:
+            try:
+                from core.audit import log_action
+                log_action(
+                    user=winning_bid.bidder,
+                    action="winner_selected",
+                    resource_type="Listing",
+                    resource_id=self.id,
+                    role="user",
+                    metadata={
+                        "winning_bid_id": str(winning_bid.id),
+                        "winning_amount": str(winning_bid.amount),
+                        "listing_title": self.title,
+                    },
+                )
+            except Exception:
+                pass  # Never block auction finalization due to a logging failure.
+
             # Broadcast auction-end to listing viewers and catalogue
             try:
                 from asgiref.sync import async_to_sync
@@ -205,7 +224,11 @@ class Bid(models.Model):
         Listing, on_delete=models.CASCADE, related_name="bids"
     )
     bidder = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="bids"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bids",
     )
     # Public-facing anonymised label, e.g. "Bidder #4729".
     anonymous_identifier = models.CharField(max_length=20)

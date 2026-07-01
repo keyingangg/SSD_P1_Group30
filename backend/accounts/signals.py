@@ -1,6 +1,7 @@
 import logging
 
 from auditlog.models import LogEntry
+from core.audit import log_action
 from axes.signals import user_locked_out
 from django.contrib.auth import get_user_model
 from django.dispatch import receiver
@@ -72,7 +73,6 @@ def handle_user_locked_out(sender, request, username=None, ip_address=None, **kw
         )
     except Exception as exc:
         logger.error("Failed to send account lockout email to %s: %s", user.email, exc)
-
     LogEntry.objects.log_create(
         instance=user,
         action=LogEntry.Action.UPDATE,
@@ -88,3 +88,22 @@ def handle_user_locked_out(sender, request, username=None, ip_address=None, **kw
             "lockout_level": profile.lockout_level,
         },
     )
+
+    # Also write our structured audit trail entry (append-only, masked)
+    try:
+        log_action(
+            user=user,
+            action="ACCOUNT_LOCKOUT",
+            resource_type="user",
+            resource_id=user.id,
+            ip_address=ip,
+            user_agent=getattr(request, "META", {}).get("HTTP_USER_AGENT", "") if request else "",
+            role=getattr(user, "role", "") or (getattr(user, "is_staff", False) and "staff" or "user"),
+            metadata={
+                "locked_until": profile.locked_until.isoformat() if profile.locked_until else None,
+                "lockout_duration": str(duration),
+                "lockout_level": profile.lockout_level,
+            },
+        )
+    except Exception:
+        logger.exception("Failed to write structured audit log for lockout of %s", user.email)

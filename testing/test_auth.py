@@ -321,7 +321,11 @@ def test_admin_user_detail_delete_removes_user(admin_client, verified_user):
     url = f"/api/accounts/admin/users/{verified_user.pk}/"
     resp = admin_client.delete(url)
     assert resp.status_code == 200
-    assert not User.objects.filter(pk=verified_user.pk).exists()
+    # Soft-delete: user row is kept with PII anonymised (NFSR-C-08 / SFR-05c).
+    verified_user.refresh_from_db()
+    assert verified_user.is_anonymised is True
+    assert verified_user.is_active is False
+    assert verified_user.email.startswith("deleted-")
 
 
 @pytest.mark.django_db

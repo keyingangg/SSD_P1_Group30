@@ -16,7 +16,10 @@ from rest_framework.parsers import MultiPartParser
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from accounts.permissions import IsAdminUser, IsEmailVerified, IsEmailVerifiedSilent
-from core.audit import log_action
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+
+from core.audit import log_action, device_fingerprint as _device_fingerprint
 from core.storage import upload_image
 from .bid_engine import submit_bid
 from .emails import send_auction_cancelled_email
@@ -32,15 +35,26 @@ from .serializers import (
 _audit_logger = logging.getLogger(__name__)
 
 
-def _broadcast_catalogue_update():
-    """Notify all catalogue WebSocket viewers that the listing set has changed."""
-    from .consumers import CATALOGUE_GROUP
-    channel_layer = get_channel_layer()
-    if channel_layer:
-        async_to_sync(channel_layer.group_send)(
-            CATALOGUE_GROUP,
-            {"type": "catalogue.update", "data": {"event": "catalogue_changed"}},
-        )
+def _unauth_ip_key(group, request):
+    """Rate-limit key: the client's IP address.
+
+    Always returns a string — django-ratelimit's key callable does not
+    support returning None to skip the check (it crashes on non-string
+    values). Skipping for authenticated users is done via `_unauth_only_rate`
+    instead, which is the mechanism the library actually supports.
+    """
+    return request.META.get("REMOTE_ADDR", "")
+
+
+def _unauth_only_rate(group, request):
+    """Rate for unauthenticated requests only.
+
+    Returns None for authenticated users so django-ratelimit skips the check
+    entirely — authenticated users are already throttled on write actions.
+    """
+    if getattr(request.user, "is_authenticated", False):
+        return None
+    return "30/m"
 
 
 class BidImmutableMixin:
@@ -62,6 +76,7 @@ class BidImmutableMixin:
             resource_id=resource_id,
             ip_address=request.META.get("REMOTE_ADDR"),
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            device_fingerprint=_device_fingerprint(request.META.get("REMOTE_ADDR"), request.META.get("HTTP_USER_AGENT", "")),
             metadata={
                 "method": method,
                 "path": request.path,
@@ -84,7 +99,7 @@ logger = logging.getLogger("securebid")
 
 
 @method_decorator(
-    ratelimit(key="ip", rate="60/m", method="GET", block=True),
+    ratelimit(key=_unauth_ip_key, rate=_unauth_only_rate, method="GET", block=True),
     name="get",
 )
 class ListingListView(APIView):
@@ -105,6 +120,10 @@ class ListingListView(APIView):
         return Response(serializer.data)
 
 
+@method_decorator(
+    ratelimit(key=_unauth_ip_key, rate=_unauth_only_rate, method="GET", block=True),
+    name="get",
+)
 class ListingDetailView(APIView):
     """View a single published listing's details (public)."""
 
@@ -122,6 +141,18 @@ class ListingDetailView(APIView):
             return Response({"detail": "Listing not found."}, status=404)
 
         if not request.user.is_staff and listing.status in {"draft", "cancelled"}:
+            log_action(
+                user=request.user if getattr(request.user, "is_authenticated", False) else None,
+                action="listing_access_denied",
+                resource_type="Listing",
+                resource_id=listing.id,
+                ip_address=request.META.get("REMOTE_ADDR"),
+                user_agent=request.META.get("HTTP_USER_AGENT", ""),
+                device_fingerprint=_device_fingerprint(request.META.get("REMOTE_ADDR"), request.META.get("HTTP_USER_AGENT", "")),
+                request_method=request.method,
+                endpoint_path=request.path,
+                metadata={"reason": "listing_not_public", "listing_status": listing.status},
+            )
             return Response({"detail": "Listing not found."}, status=404)
 
         serializer = ListingSerializer(listing)
@@ -174,6 +205,32 @@ class ListingCreateView(APIView):
             status="draft" if save_as_draft else Listing.determine_status(starts_at, ends_at),
         )
 
+        log_action(
+            user=request.user,
+            action="listing_created",
+            resource_type="Listing",
+            resource_id=listing.id,
+            ip_address=request.META.get("REMOTE_ADDR"),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            device_fingerprint=_device_fingerprint(request.META.get("REMOTE_ADDR"), request.META.get("HTTP_USER_AGENT", "")),
+            request_method=request.method,
+            endpoint_path=request.path,
+            metadata={"listing_title": listing.title, "save_as_draft": save_as_draft},
+        )
+
+        log_action(
+            user=request.user,
+            action="listing_created",
+            resource_type="Listing",
+            resource_id=listing.id,
+            ip_address=request.META.get("REMOTE_ADDR"),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            device_fingerprint=_device_fingerprint(request.META.get("REMOTE_ADDR"), request.META.get("HTTP_USER_AGENT", "")),
+            request_method=request.method,
+            endpoint_path=request.path,
+            metadata={"listing_title": listing.title, "save_as_draft": save_as_draft},
+        )
+
         if not save_as_draft:
             _broadcast_catalogue_update()
 
@@ -214,6 +271,18 @@ class ListingUpdateView(APIView):
         data = serializer.validated_data
         save_as_draft = data.get("save_as_draft", False)
 
+        # Capture state before modification for the audit trail (NFSR-AC-03).
+        before_snapshot = {
+            "title": listing.title,
+            "description": listing.description,
+            "category": listing.category,
+            "starting_price": str(listing.starting_price),
+            "minimum_increment": str(listing.minimum_increment),
+            "starts_at": listing.starts_at.isoformat() if listing.starts_at else None,
+            "ends_at": listing.ends_at.isoformat() if listing.ends_at else None,
+            "status": listing.status,
+        }
+
         listing.title = data["title"]
         listing.description = data.get("description", listing.description)
         listing.category = data.get("category", listing.category)
@@ -231,6 +300,60 @@ class ListingUpdateView(APIView):
             listing.status = Listing.determine_status(listing.starts_at, listing.ends_at)
 
         listing.save()
+
+        after_snapshot = {
+            "title": listing.title,
+            "description": listing.description,
+            "category": listing.category,
+            "starting_price": str(listing.starting_price),
+            "minimum_increment": str(listing.minimum_increment),
+            "starts_at": listing.starts_at.isoformat() if listing.starts_at else None,
+            "ends_at": listing.ends_at.isoformat() if listing.ends_at else None,
+            "status": listing.status,
+        }
+
+        log_action(
+            user=request.user,
+            action="listing_updated",
+            resource_type="Listing",
+            resource_id=listing.id,
+            ip_address=request.META.get("REMOTE_ADDR"),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            device_fingerprint=_device_fingerprint(request.META.get("REMOTE_ADDR"), request.META.get("HTTP_USER_AGENT", "")),
+            role="staff" if request.user.is_staff else "user",
+            before=before_snapshot,
+            after=after_snapshot,
+            request_method=request.method,
+            endpoint_path=request.path,
+            metadata={"save_as_draft": save_as_draft},
+        )
+
+        after_snapshot = {
+            "title": listing.title,
+            "description": listing.description,
+            "category": listing.category,
+            "starting_price": str(listing.starting_price),
+            "minimum_increment": str(listing.minimum_increment),
+            "starts_at": listing.starts_at.isoformat() if listing.starts_at else None,
+            "ends_at": listing.ends_at.isoformat() if listing.ends_at else None,
+            "status": listing.status,
+        }
+
+        log_action(
+            user=request.user,
+            action="listing_updated",
+            resource_type="Listing",
+            resource_id=listing.id,
+            ip_address=request.META.get("REMOTE_ADDR"),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            device_fingerprint=_device_fingerprint(request.META.get("REMOTE_ADDR"), request.META.get("HTTP_USER_AGENT", "")),
+            role="staff" if request.user.is_staff else "user",
+            before=before_snapshot,
+            after=after_snapshot,
+            request_method=request.method,
+            endpoint_path=request.path,
+            metadata={"save_as_draft": save_as_draft},
+        )
 
         if not save_as_draft:
             _broadcast_catalogue_update()
@@ -268,6 +391,18 @@ class ListingDeleteView(APIView):
                 status=409,
             )
 
+        log_action(
+            user=request.user,
+            action="listing_deleted",
+            resource_type="Listing",
+            resource_id=listing.id,
+            ip_address=request.META.get("REMOTE_ADDR"),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            device_fingerprint=_device_fingerprint(request.META.get("REMOTE_ADDR"), request.META.get("HTTP_USER_AGENT", "")),
+            request_method=request.method,
+            endpoint_path=request.path,
+            metadata={"listing_title": listing.title},
+        )
         listing.delete()
         return Response(status=204)
 
@@ -323,6 +458,7 @@ class ListingCancelView(APIView):
             resource_id=listing.id,
             ip_address=request.META.get("REMOTE_ADDR"),
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            device_fingerprint=_device_fingerprint(request.META.get("REMOTE_ADDR"), request.META.get("HTTP_USER_AGENT", "")),
             metadata={
                 "listing_title": listing.title,
                 "bidders_notified": notified,
@@ -385,6 +521,7 @@ class BidSubmitView(BidImmutableMixin, APIView):
                 resource_id=listing_id,
                 ip_address=ip,
                 user_agent=ua,
+                device_fingerprint=_device_fingerprint(ip, ua),
                 metadata={
                     "listing_id": str(listing_id),
                     "attempted_amount": str(amount_raw),
@@ -404,6 +541,7 @@ class BidSubmitView(BidImmutableMixin, APIView):
                 resource_id=listing_id,
                 ip_address=ip,
                 user_agent=ua,
+                device_fingerprint=_device_fingerprint(ip, ua),
                 metadata={
                     "listing_id": str(listing_id),
                     "attempted_amount": str(amount_raw),
@@ -420,6 +558,7 @@ class BidSubmitView(BidImmutableMixin, APIView):
                 resource_id=listing_id,
                 ip_address=ip,
                 user_agent=ua,
+                device_fingerprint=_device_fingerprint(ip, ua),
                 metadata={
                     "listing_id": str(listing_id),
                     "attempted_amount": str(amount_raw),
@@ -437,6 +576,7 @@ class BidSubmitView(BidImmutableMixin, APIView):
                 resource_id=listing_id,
                 ip_address=ip,
                 user_agent=ua,
+                device_fingerprint=_device_fingerprint(ip, ua),
                 metadata={
                     "listing_id": str(listing_id),
                     "attempted_amount": str(amount_raw),
@@ -461,6 +601,7 @@ class BidSubmitView(BidImmutableMixin, APIView):
                 resource_id=listing_id,
                 ip_address=ip,
                 user_agent=ua,
+                device_fingerprint=_device_fingerprint(ip, ua),
                 metadata={
                     "listing_id": str(listing_id),
                     "attempted_amount": str(amount_raw),
@@ -473,6 +614,34 @@ class BidSubmitView(BidImmutableMixin, APIView):
                 status=500,
             )
         # bid_placed audit log is written inside the atomic block in submit_bid
+
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"auction_{listing_id}",
+            {
+                "type": "bid_update",
+                "data": {
+                    "listing_id": str(listing.id),
+                    "current_highest_bid": str(listing.current_highest_bid),
+                    "anonymous_identifier": bid.anonymous_identifier,
+                    "submitted_at": bid.submitted_at.isoformat(),
+                },
+            },
+        )
+
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"auction_{listing_id}",
+            {
+                "type": "bid_update",
+                "data": {
+                    "listing_id": str(listing.id),
+                    "current_highest_bid": str(listing.current_highest_bid),
+                    "anonymous_identifier": bid.anonymous_identifier,
+                    "submitted_at": bid.submitted_at.isoformat(),
+                },
+            },
+        )
 
         # Broadcast to all WebSocket viewers of this listing
         channel_layer = get_channel_layer()
