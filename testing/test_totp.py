@@ -268,7 +268,10 @@ def test_delete_account_with_mfa_valid_otp_succeeds(auth_client, verified_user):
     with patch("accounts.views.invalidate_all_user_sessions"):
         resp = auth_client.post(DELETE_ACCOUNT_URL, {"current_password": "StrongPass123!", "otp_code": token}, format="json")
     assert resp.status_code == 200
-    assert not User.objects.filter(pk=verified_user.pk).exists()
+    # Soft-delete: user row is kept with PII anonymised (NFSR-C-08 / SFR-05c).
+    verified_user.refresh_from_db()
+    assert verified_user.is_anonymised is True
+    assert verified_user.is_active is False
 
 
 @pytest.mark.django_db
@@ -284,4 +287,7 @@ def test_delete_account_without_mfa_succeeds_without_otp(auth_client, verified_u
     with patch("accounts.views.invalidate_all_user_sessions"):
         resp = auth_client.post(DELETE_ACCOUNT_URL, {"current_password": "StrongPass123!"}, format="json")
     assert resp.status_code == 200
-    assert not User.objects.filter(pk=verified_user.pk).exists()
+    # Soft-delete: user row is kept with PII anonymised (NFSR-C-08 / SFR-05c).
+    verified_user.refresh_from_db()
+    assert verified_user.is_anonymised is True
+    assert verified_user.is_active is False
