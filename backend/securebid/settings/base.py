@@ -266,6 +266,34 @@ DEFAULT_FROM_EMAIL = os.environ.get(
 )
 
 # --------------------------------------------------------------------------
+# Security alerting (NFSR-AC-05 / NFSR-AC-06 / NFSR-IN-07 / FSR-AC-07)
+# --------------------------------------------------------------------------
+# Recipients for automated security alerts (failed-login bursts, bid-rate
+# anomalies, denied-authorisation bursts, audit log hash mismatches, clock
+# drift). Falls back to Django's ADMINS setting if left empty.
+SECURITY_ALERT_EMAILS = [
+    e.strip()
+    for e in os.environ.get("SECURITY_ALERT_EMAILS", "").split(",")
+    if e.strip()
+]
+# Optional Slack-compatible incoming webhook URL. Alerts are always logged
+# regardless of whether this is set.
+SECURITY_ALERT_WEBHOOK_URL = os.environ.get("SECURITY_ALERT_WEBHOOK_URL", "")
+
+# ≥5 denied authorisation attempts from the same account/IP within this
+# rolling window triggers a security alert (FSR-AC-07).
+AUTHZ_DENIAL_ALERT_THRESHOLD = int(os.environ.get("AUTHZ_DENIAL_ALERT_THRESHOLD", "5"))
+AUTHZ_DENIAL_ALERT_WINDOW_SECONDS = int(
+    os.environ.get("AUTHZ_DENIAL_ALERT_WINDOW_SECONDS", "300")
+)
+
+# Clock drift verification against NTP (NFSR-AC-06 / NFSR-IN-01).
+NTP_SERVER = os.environ.get("NTP_SERVER", "pool.ntp.org")
+CLOCK_DRIFT_ALERT_THRESHOLD_SECONDS = float(
+    os.environ.get("CLOCK_DRIFT_ALERT_THRESHOLD_SECONDS", "2.0")
+)
+
+# --------------------------------------------------------------------------
 # Stripe (test/sandbox mode — no real money moves with pk_test/sk_test keys)
 # --------------------------------------------------------------------------
 # The secret key (sk_test_...) is backend-only and must never be exposed to the

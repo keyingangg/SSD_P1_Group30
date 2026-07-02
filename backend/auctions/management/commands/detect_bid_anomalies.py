@@ -19,6 +19,7 @@ from django.utils import timezone
 
 from auctions.emails import send_bid_anomaly_email
 from auctions.models import Bid
+from core.alerts import send_security_alert
 from core.audit import log_action
 
 
@@ -82,6 +83,26 @@ class Command(BaseCommand):
                 resource_id=bidder_id,
                 metadata={"bid_count": bid_count, "window_minutes": window},
             )
+
+            try:
+                send_security_alert(
+                    subject="Excessive bid submission rate",
+                    message=(
+                        f"Bidder {email} ({bidder_id}) submitted {bid_count} bids "
+                        f"in the last {window} minute(s), exceeding the {threshold}/min threshold."
+                    ),
+                    severity="high",
+                    metadata={
+                        "bidder_id": str(bidder_id),
+                        "email": email,
+                        "bid_count": bid_count,
+                        "window_minutes": window,
+                        "threshold": threshold,
+                    },
+                )
+            except Exception as exc:
+                self.stderr.write(f"  Failed to send security alert for {email}: {exc}")
+
             self.stdout.write(f"  Flagged bidder={bidder_id} email={email} bid_count={bid_count}")
 
         style = self.style.WARNING if count else self.style.SUCCESS

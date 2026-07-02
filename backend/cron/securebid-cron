@@ -1,0 +1,28 @@
+# Scheduled security jobs for SecureBid (NFSR-AC-05 / NFSR-AC-06 / NFSR-IN-07).
+#
+# Installed on the deploy user's crontab by .github/workflows/deploy.yml on
+# every push to main (`crontab backend/cron/securebid-cron`). No in-app
+# scheduler (Celery/APScheduler) is used in this project — management
+# commands are invoked directly via OS cron, the same convention already
+# used for accounts.anonymise_deleted_users.
+#
+# All commands exit non-zero on finding an anomaly so failures are visible
+# in `grep -l FAILED` over the log directory or via cron's own mail-on-error
+# behaviour, in addition to the security alert each command sends directly.
+
+SHELL=/bin/bash
+MAILTO=""
+
+# Bid-rate anomaly detection (>20 bids/min/account) — every minute.
+* * * * * cd /var/www/securebid/backend && source venv/bin/activate && DJANGO_SETTINGS_MODULE=securebid.settings.production python manage.py detect_bid_anomalies >> /var/log/securebid/bid_anomalies.log 2>&1
+
+# Host clock drift check against NTP — hourly.
+5 * * * * cd /var/www/securebid/backend && source venv/bin/activate && DJANGO_SETTINGS_MODULE=securebid.settings.production python manage.py check_clock_drift >> /var/log/securebid/clock_drift.log 2>&1
+
+# Audit log SHA-256 hash verification — every 15 minutes (each mismatch
+# fires an immediate alert from inside the command; this cadence bounds the
+# worst-case detection latency for tampering that occurs between runs).
+*/15 * * * * cd /var/www/securebid/backend && source venv/bin/activate && DJANGO_SETTINGS_MODULE=securebid.settings.production python manage.py verify_audit_log_hashes >> /var/log/securebid/audit_hash_verify.log 2>&1
+
+# Retention policy visibility report — weekly, Sunday 03:00.
+0 3 * * 0 cd /var/www/securebid/backend && source venv/bin/activate && DJANGO_SETTINGS_MODULE=securebid.settings.production python manage.py verify_retention_policy >> /var/log/securebid/retention.log 2>&1

@@ -69,6 +69,19 @@ New `AdminTerminateSessionsView` (`backend/accounts/views.py`) at `POST /api/acc
 ### 11. Malware scanning
 `backend/core/validators.py`'s `scan_for_malware()` now connects to a ClamAV daemon via `clamd.ClamdNetworkSocket` (host/port from new `CLAMD_HOST`/`CLAMD_PORT` settings, defaulting to `localhost:3310`), scans the upload with `instream()`, and raises `ValidationError` on either a positive match **or** any connection/scan failure (fail-closed, per the confirmed decision). Added `clamd==1.0.2` to `requirements.txt`. **Requires an actual ClamAV daemon running and reachable** — this wasn't provisioned as part of this change; without one, image uploads will be rejected.
 
+### 12. Automated security alerting (NFSR-AC-05 / NFSR-AC-06 / NFSR-IN-07 / FSR-AC-07)
+New `backend/core/alerts.py` (`send_security_alert`) delivers to an internal security distribution list — `SECURITY_ALERT_EMAILS` (falls back to Django's `ADMINS`) and an optional `SECURITY_ALERT_WEBHOOK_URL` (Slack-compatible) — and always logs via the `security_alerts` logger regardless of delivery success. This is distinct from the existing `accounts/emails.py` / `auctions/emails.py` helpers, which notify the *affected end user*, not the security team. Wired into four triggers:
+- **≥5 consecutive failed logins, same account/IP** — `accounts/signals.py`'s `handle_user_locked_out` (already fires at `AXES_FAILURE_LIMIT`) now also calls `send_security_alert` alongside the existing user-facing lockout email.
+- **>20 bid submissions/min, single account** — `auctions/management/commands/detect_bid_anomalies.py` now calls `send_security_alert` per flagged bidder, in addition to the existing `send_bid_anomaly_email` + audit entry.
+- **≥5 denied authorisation attempts, same account/IP, short window** — new `backend/core/security_monitoring.py` (`record_authz_denial`) counts `AUTHZ_DENIED` events per account and per IP using Django's cache framework (5-minute rolling window, threshold 5, both configurable via `AUTHZ_DENIAL_ALERT_THRESHOLD`/`AUTHZ_DENIAL_ALERT_WINDOW_SECONDS`), firing one alert per window via an atomic `cache.add` dedup guard. Called from both `RBACMiddleware` denial branches in `core/middleware.py`.
+- **Any SHA-256 hash mismatch on an audit log entry** — `verify_audit_log_hashes.py` now calls `send_security_alert` immediately inside the row loop on each mismatch (not batched at the end), in addition to the existing stderr output + `SystemExit(1)`.
+
+### 13. Scheduled jobs (closes follow-up #3 below)
+`backend/cron/securebid-cron` defines the OS-level cron schedule for `verify_audit_log_hashes` (every 15 min), `detect_bid_anomalies` (every 1 min), `check_clock_drift` (hourly), and `verify_retention_policy` (weekly), all logging to `/var/log/securebid/`. `.github/workflows/deploy.yml` installs it via `crontab backend/cron/securebid-cron` on every deploy, so the schedule stays in sync with the code. This follows the project's existing decision not to introduce an in-app scheduler (Celery/APScheduler) — same convention as `anonymise_deleted_users`.
+
+### 14. UTC/NTP time synchronisation (NFSR-AC-06 / FSR-AC-08 / NFSR-IN-01)
+Audited timestamp generation project-wide: every timestamp already goes through `django.utils.timezone.now()` (zero uses of naive `datetime.now()`/`datetime.utcnow()` anywhere in the codebase), and `USE_TZ=True` means Postgres stores all `DateTimeField`s as UTC regardless of the `TIME_ZONE="Asia/Singapore"` display setting. `Bid.submitted_at` (`auto_now_add`) and `AuditLog.timestamp` (`default=timezone.now`) already share that same clock source, so bid tie-breaking (`Listing.finalize_if_ended`'s `order_by("-amount", "submitted_at", "id")`) and audit log ordering are already internally consistent — the only real gap was verifying the underlying *host* clock is itself NTP-synchronised. New `check_clock_drift` management command (`core/management/commands/check_clock_drift.py`, using `ntplib`) queries an NTP server, compares against the local clock, and fires a `send_security_alert` + `clock_drift_detected` audit entry if drift exceeds `CLOCK_DRIFT_ALERT_THRESHOLD_SECONDS` (default 2s). See `backend/NTP_TIME_SYNC.md` for the OS-level NTP setup this monitors.
+
 ---
 
 ## 4. Review-only — not coded
@@ -93,5 +106,7 @@ Full suite: **147/147 passing** (`cd testing && python -m pytest -q`, using `../
 
 1. Run a ClamAV daemon reachable at `CLAMD_HOST:CLAMD_PORT` (env-configurable) — uploads fail closed without it.
 2. Investigate the 37 blank-`row_hash` `AuditLog` rows found in the dev database (§3, item 8) — find and fix whatever seed/demo path bypasses `log_action()`.
-3. Schedule `verify_audit_log_hashes`, `detect_bid_anomalies`, and `verify_retention_policy` via cron / Windows Task Scheduler (no in-app scheduler exists in this project — same convention as the existing `anonymise_deleted_users` command).
+3. ~~Schedule `verify_audit_log_hashes`, `detect_bid_anomalies`, and `verify_retention_policy` via cron~~ — done, see §3 item 13 (`backend/cron/securebid-cron`, installed by `deploy.yml`).
 4. Decide whether to act on the two review-only items in §4 before a real production deployment.
+5. Set `SECURITY_ALERT_EMAILS` (and optionally `SECURITY_ALERT_WEBHOOK_URL`) in the production `.env` — without it, security alerts fall back to Django's `ADMINS` setting, which is currently empty (i.e. alerts would only be logged, not delivered). See §3 item 12.
+6. Confirm the EC2 host's outbound network allows NTP (UDP/123) to `NTP_SERVER` (default `pool.ntp.org`) so `check_clock_drift` can actually reach it — see `backend/NTP_TIME_SYNC.md`.

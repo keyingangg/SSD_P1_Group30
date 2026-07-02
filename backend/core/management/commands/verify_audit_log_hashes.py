@@ -22,6 +22,7 @@ Run on a schedule (e.g. daily cron):
 """
 from django.core.management.base import BaseCommand
 
+from core.alerts import send_security_alert
 from core.audit import _compute_row_hash
 from core.models import AuditLog
 
@@ -79,6 +80,27 @@ class Command(BaseCommand):
                 self.stderr.write(
                     f"  MISMATCH id={row.id} action={row.action} timestamp={row.timestamp}"
                 )
+                try:
+                    send_security_alert(
+                        subject="Audit log hash mismatch detected",
+                        message=(
+                            f"AuditLog row {row.id} (action={row.action}, "
+                            f"timestamp={row.timestamp.isoformat()}) failed SHA-256 "
+                            "hash verification. This indicates tampering or an "
+                            "out-of-band write bypassing the append-only ORM path."
+                        ),
+                        severity="critical",
+                        metadata={
+                            "row_id": str(row.id),
+                            "action": row.action,
+                            "resource_type": row.resource_type,
+                            "timestamp": row.timestamp.isoformat(),
+                            "stored_hash": row.row_hash,
+                            "recomputed_hash": recomputed,
+                        },
+                    )
+                except Exception:
+                    self.stderr.write(f"  Failed to send security alert for row {row.id}")
             elif verbose:
                 self.stdout.write(f"  OK id={row.id} action={row.action}")
 

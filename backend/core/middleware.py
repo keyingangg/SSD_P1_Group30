@@ -8,6 +8,7 @@ from django.http import Http404
 from django.utils.deprecation import MiddlewareMixin
 
 from .audit import log_action
+from .security_monitoring import record_authz_denial
 
 logger = logging.getLogger("securebid")
 
@@ -104,6 +105,12 @@ class RBACMiddleware(MiddlewareMixin):
                     )
                 except Exception:
                     pass
+                record_authz_denial(
+                    user,
+                    request.META.get("REMOTE_ADDR"),
+                    view_name="admin_path",
+                    endpoint_path=path,
+                )
                 raise Http404("Not found.")
 
         view_class = getattr(view_func, "view_class", None)
@@ -130,6 +137,12 @@ class RBACMiddleware(MiddlewareMixin):
                     )
                 except Exception:
                     pass
+                record_authz_denial(
+                    user,
+                    request.META.get("REMOTE_ADDR"),
+                    view_name=view_class.__name__,
+                    endpoint_path=path,
+                )
                 raise Http404("Not found.")
 
         return None
