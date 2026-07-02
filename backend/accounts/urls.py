@@ -48,4 +48,9 @@ urlpatterns = [
         views.AdminUserDetailView.as_view(),
         name="admin-user-detail",
     ),
+    path(
+        "admin/users/<uuid:user_id>/terminate-sessions/",
+        views.AdminTerminateSessionsView.as_view(),
+        name="admin-terminate-sessions",
+    ),
 ]

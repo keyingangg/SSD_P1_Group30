@@ -52,6 +52,36 @@ def test_users_can_see_ended_auctions_in_list(client, admin_user):
 
 
 @pytest.mark.django_db
+def test_auction_list_search_filters_by_title(client, admin_user):
+    now = timezone.now()
+    common = dict(
+        created_by=admin_user,
+        description="desc",
+        image_key="",
+        starting_price="100.00",
+        current_highest_bid="150.00",
+        minimum_increment="5.00",
+        starts_at=now - timedelta(days=2),
+        ends_at=now - timedelta(hours=1),
+        status="ended",
+        category="Others",
+    )
+    matching = Listing.objects.create(title="Vintage Rolex Watch", **common)
+    Listing.objects.create(title="Leather Handbag", **common)
+
+    resp = client.get(LIST_URL, {"q": "rolex"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert {item["id"] for item in data} == {str(matching.id)}
+
+
+@pytest.mark.django_db
+def test_auction_list_search_rejects_invalid_ordering(client):
+    resp = client.get(LIST_URL, {"ordering": "'; DROP TABLE listings;--"})
+    assert resp.status_code == 400
+
+
+@pytest.mark.django_db
 def test_users_can_view_ended_auction_details(client, admin_user):
     now = timezone.now()
     

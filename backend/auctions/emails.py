@@ -27,3 +27,29 @@ def send_auction_cancelled_email(bidder_email, listing):
         [bidder_email],
         fail_silently=False,
     )
+
+
+def send_bid_anomaly_email(bidder_email, bid_count, window_minutes):
+    """Alert a bidder (and leave a record) that their bidding rate looked anomalous.
+
+    Sent by the detect_bid_anomalies management command (FSR-AC-07 / NFSR-AC-05)
+    when a user places an unusually high number of bids in a short window —
+    the 30/min rate limit already throttles submissions; this flags the
+    pattern for review rather than blocking it outright.
+    """
+    site = settings.SITE_NAME
+    subject = f"Unusual bidding activity on your {site} account"
+    message = (
+        f"We noticed {bid_count} bids placed from your account in the last "
+        f"{window_minutes} minute(s), which is higher than expected.\n\n"
+        "If this was you, no action is needed. If you did not place these "
+        "bids, please contact support and consider changing your password.\n\n"
+        f"— The {site} Team"
+    )
+    send_mail(
+        subject,
+        message,
+        settings.DEFAULT_FROM_EMAIL,
+        [bidder_email],
+        fail_silently=False,
+    )

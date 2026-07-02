@@ -333,3 +333,103 @@ def test_admin_user_detail_returns_404_for_regular_user(auth_client, admin_user)
     url = f"/api/accounts/admin/users/{admin_user.pk}/"
     resp = auth_client.patch(url)
     assert resp.status_code == 404
+
+
+@pytest.mark.django_db
+def test_admin_terminate_sessions_clears_active_session(admin_client, verified_user):
+    from rest_framework.test import APIClient
+
+    user_client = APIClient()
+    user_client.force_login(verified_user)
+    assert "sessionid" in user_client.cookies
+
+    url = f"/api/accounts/admin/users/{verified_user.pk}/terminate-sessions/"
+    resp = admin_client.post(url)
+    assert resp.status_code == 200
+
+    from django.contrib.sessions.models import Session
+    remaining = [
+        s for s in Session.objects.all()
+        if str(s.get_decoded().get("_auth_user_id")) == str(verified_user.pk)
+    ]
+    assert remaining == []
+
+
+@pytest.mark.django_db
+def test_admin_terminate_sessions_returns_404_for_regular_user(auth_client, admin_user):
+    url = f"/api/accounts/admin/users/{admin_user.pk}/terminate-sessions/"
+    resp = auth_client.post(url)
+    assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Account deletion — unpaid order guard (SFR-05b)
+# ---------------------------------------------------------------------------
+
+def _make_pending_order(winner):
+    """Create a minimal ended listing -> winning bid -> pending_payment Order."""
+    from auctions.models import Bid, Listing
+    from payments.models import Order
+
+    now = timezone.now()
+    from datetime import timedelta
+    seller = User.objects.create_user(
+        email="seller-unpaid@example.com",
+        display_name="Seller",
+        password="StrongPass123!",
+        is_active=True,
+        is_email_verified=True,
+    )
+    listing = Listing.objects.create(
+        created_by=seller,
+        title="Auction Item",
+        description="An item that was won",
+        image_key="",
+        category="Others",
+        starting_price="100.00",
+        current_highest_bid="150.00",
+        minimum_increment="5.00",
+        starts_at=now - timedelta(days=2),
+        ends_at=now - timedelta(hours=1),
+        status="ended",
+        winner=winner,
+    )
+    bid = Bid.objects.create(
+        listing=listing,
+        bidder=winner,
+        anonymous_identifier="Bidder #1",
+        amount="150.00",
+        is_winning=True,
+    )
+    return Order.objects.create(
+        winner=winner,
+        winning_bid=bid,
+        fulfillment_status="pending_payment",
+        delivery_address_snapshot="",
+    )
+
+
+@pytest.mark.django_db
+def test_delete_account_blocked_with_unpaid_order(auth_client, verified_user):
+    _make_pending_order(verified_user)
+
+    resp = auth_client.post(
+        "/api/accounts/delete/", {"current_password": "StrongPass123!"}, format="json"
+    )
+    assert resp.status_code == 400
+    verified_user.refresh_from_db()
+    assert verified_user.is_anonymised is False
+
+
+@pytest.mark.django_db
+def test_delete_account_succeeds_once_order_paid(auth_client, verified_user):
+    order = _make_pending_order(verified_user)
+    order.fulfillment_status = "paid"
+    order.save(update_fields=["fulfillment_status"])
+
+    resp = auth_client.post(
+        "/api/accounts/delete/", {"current_password": "StrongPass123!"}, format="json"
+    )
+    assert resp.status_code == 200
+    verified_user.refresh_from_db()
+    assert verified_user.is_anonymised is True

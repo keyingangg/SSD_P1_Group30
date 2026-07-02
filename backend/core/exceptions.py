@@ -1,7 +1,7 @@
 """Custom DRF exception handling."""
 import logging
 
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import UnsupportedMediaType, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
 
@@ -49,6 +49,12 @@ def custom_exception_handler(exc, context):
     # field names and schema information are not exposed (NFSR-IN-03 / FSR-IN-05).
     if isinstance(exc, ValidationError) and response.status_code == 400:
         return Response({"detail": "Request validation failed."}, status=400)
+
+    # DRF's default UnsupportedMediaType message echoes the client-supplied
+    # Content-Type back into the response body; return a generic one instead
+    # (FSR-IN-05).
+    if isinstance(exc, UnsupportedMediaType):
+        return Response({"detail": "Unsupported content type."}, status=415)
 
     return response
 

@@ -63,7 +63,12 @@ class CreatePaymentIntentView(APIView):
                 resource_id=order.id,
                 ip_address=get_client_ip(request),
                 user_agent=request.META.get("HTTP_USER_AGENT", ""),
-                metadata={"requested_by": str(request.user.id), "security_event": True},
+                metadata={
+                    "requested_by": str(request.user.id),
+                    "security_event": True,
+                    "session_id": request.session.session_key,
+                    "listing_id": str(order.winning_bid.listing_id),
+                },
             )
             return Response({"detail": "Forbidden."}, status=403)
 
@@ -86,7 +91,14 @@ class CreatePaymentIntentView(APIView):
                         action="ORDER_PAID",
                         resource_type="Order",
                         resource_id=order.id,
-                        metadata={"payment_intent": order.stripe_payment_intent_id, "source": "auto_heal"},
+                        ip_address=request.META.get("REMOTE_ADDR", ""),
+                        user_agent=request.META.get("HTTP_USER_AGENT", ""),
+                        metadata={
+                            "payment_intent": order.stripe_payment_intent_id,
+                            "source": "auto_heal",
+                            "session_id": request.session.session_key,
+                            "listing_id": str(order.winning_bid.listing_id),
+                        },
                     )
                     logger.info("Order %s auto-healed to paid (pi=%s)", order.id, order.stripe_payment_intent_id)
                     return Response({"detail": "This order has already been paid."}, status=400)
@@ -128,6 +140,8 @@ class CreatePaymentIntentView(APIView):
                 "order_id": str(order.id),
                 "amount_cents": amount_cents,
                 "currency": settings.STRIPE_CURRENCY,
+                "session_id": request.session.session_key,
+                "listing_id": str(order.winning_bid.listing_id),
             },
         )
 
@@ -150,6 +164,7 @@ class StripeWebhookView(APIView):
     # session auth/CSRF and allow the unauthenticated server-to-server call.
     authentication_classes = []
     permission_classes = [AllowAny]
+    http_method_names = ["post"]
 
     def post(self, request):
         payload = request.body
@@ -172,7 +187,7 @@ class StripeWebhookView(APIView):
         obj = event.get("data", {}).get("object", {})
 
         if event_type == "payment_intent.succeeded":
-            self._handle_payment_succeeded(obj)
+            self._handle_payment_succeeded(obj, ip_address=request.META.get("REMOTE_ADDR"))
         elif event_type == "payment_intent.payment_failed":
             logger.info(
                 "Stripe webhook: payment failed for intent=%s", obj.get("id")
@@ -181,7 +196,7 @@ class StripeWebhookView(APIView):
         # Always 200 so Stripe stops retrying once we've safely received it.
         return Response({"received": True}, status=200)
 
-    def _handle_payment_succeeded(self, intent):
+    def _handle_payment_succeeded(self, intent, ip_address=None):
         payment_intent_id = intent.get("id")
         metadata = intent.get("metadata") or {}
         claimed_winner_id = metadata.get("winner_id")
@@ -211,11 +226,15 @@ class StripeWebhookView(APIView):
                 action="PAYMENT_WINNER_MISMATCH",
                 resource_type="Order",
                 resource_id=order.id,
+                ip_address=ip_address,
                 metadata={
                     "order_winner": str(order.winner_id),
                     "claimed_winner": str(claimed_winner_id),
                     "payment_intent": str(payment_intent_id),
                     "security_event": True,
+                    # Server-to-server Stripe webhook — no browser session exists.
+                    "session_id": None,
+                    "listing_id": str(order.winning_bid.listing_id),
                 },
             )
             return
@@ -228,7 +247,13 @@ class StripeWebhookView(APIView):
                 action="ORDER_PAID",
                 resource_type="Order",
                 resource_id=order.id,
-                metadata={"payment_intent": str(payment_intent_id)},
+                ip_address=ip_address,
+                metadata={
+                    "payment_intent": str(payment_intent_id),
+                    # Server-to-server Stripe webhook — no browser session exists.
+                    "session_id": None,
+                    "listing_id": str(order.winning_bid.listing_id),
+                },
             )
             logger.info("Order %s marked paid via webhook", order.id)
 
@@ -312,7 +337,11 @@ class OrderDetailView(APIView):
                 resource_id=order.id,
                 ip_address=get_client_ip(request),
                 user_agent=request.META.get("HTTP_USER_AGENT", ""),
-                metadata={"requested_by": str(request.user.id)},
+                metadata={
+                    "requested_by": str(request.user.id),
+                    "session_id": request.session.session_key,
+                    "listing_id": str(order.winning_bid.listing_id),
+                },
             )
             return Response({"detail": "Forbidden."}, status=403)
 
@@ -401,7 +430,12 @@ class ConfirmPaymentView(APIView):
                     resource_type="Order",
                     resource_id=order.id,
                     ip_address=get_client_ip(request),
-                    metadata={"payment_intent": payment_intent_id, "security_event": True},
+                    metadata={
+                        "payment_intent": payment_intent_id,
+                        "security_event": True,
+                        "session_id": request.session.session_key,
+                        "listing_id": str(order.winning_bid.listing_id),
+                    },
                 )
                 return Response({"detail": "Payment does not match this order."}, status=400)
 
@@ -417,7 +451,12 @@ class ConfirmPaymentView(APIView):
             resource_id=order.id,
             ip_address=get_client_ip(request),
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
-            metadata={"payment_intent": payment_intent_id, "source": "direct_confirm"},
+            metadata={
+                "payment_intent": payment_intent_id,
+                "source": "direct_confirm",
+                "session_id": request.session.session_key,
+                "listing_id": str(order.winning_bid.listing_id),
+            },
         )
         logger.info("Order %s paid via direct confirm (pi=%s)", order.id, payment_intent_id)
         return Response({"detail": "Payment confirmed."}, status=200)
@@ -467,6 +506,10 @@ class UpdateFulfillmentView(APIView):
             resource_id=order.id,
             ip_address=get_client_ip(request),
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
-            metadata={"fulfillment_status": new_status},
+            metadata={
+                "fulfillment_status": new_status,
+                "session_id": request.session.session_key,
+                "listing_id": str(order.winning_bid.listing_id),
+            },
         )
         return Response({"detail": "Order fulfillment updated."}, status=200)

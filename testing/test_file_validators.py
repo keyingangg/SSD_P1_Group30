@@ -1,11 +1,14 @@
 """Tests for server-side upload validation (core.validators)."""
 import io
+from unittest.mock import MagicMock, patch
 
+import clamd
 import pytest
 from rest_framework.exceptions import ValidationError
 
 from core.validators import (
     DEFAULT_MAX_UPLOAD_BYTES,
+    scan_for_malware,
     validate_file_extension,
     validate_file_size,
     validate_mime_type,
@@ -56,3 +59,27 @@ def test_validate_file_size_rejects_oversized_file():
     oversized = io.BytesIO(b"x" * (DEFAULT_MAX_UPLOAD_BYTES + 1))
     with pytest.raises(ValidationError):
         validate_file_size(oversized)
+
+
+def test_scan_for_malware_allows_clean_result():
+    mock_client = MagicMock()
+    mock_client.instream.return_value = {"stream": ("OK", None)}
+    with patch("core.validators.clamd.ClamdNetworkSocket", return_value=mock_client):
+        scan_for_malware(io.BytesIO(PNG_BYTES))  # does not raise
+
+
+def test_scan_for_malware_rejects_positive_match():
+    mock_client = MagicMock()
+    mock_client.instream.return_value = {"stream": ("FOUND", "Eicar-Test-Signature")}
+    with patch("core.validators.clamd.ClamdNetworkSocket", return_value=mock_client):
+        with pytest.raises(ValidationError):
+            scan_for_malware(io.BytesIO(PNG_BYTES))
+
+
+def test_scan_for_malware_fails_closed_when_daemon_unreachable():
+    with patch(
+        "core.validators.clamd.ClamdNetworkSocket",
+        side_effect=clamd.ConnectionError("daemon down"),
+    ):
+        with pytest.raises(ValidationError):
+            scan_for_malware(io.BytesIO(PNG_BYTES))

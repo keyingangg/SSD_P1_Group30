@@ -239,6 +239,9 @@ class Bid(models.Model):
 
     class Meta:
         db_table = "bids"
+        indexes = [
+            models.Index(fields=["bidder", "submitted_at"], name="bid_bidder_submitted_idx"),
+        ]
 
     def __str__(self):
         return f"{self.anonymous_identifier} - {self.amount}"

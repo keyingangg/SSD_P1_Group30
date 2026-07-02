@@ -27,6 +27,7 @@ from .serializers import (
     BidSubmitSerializer,
     ListingAdminSerializer,
     ListingCreateSerializer,
+    ListingSearchQuerySerializer,
     ListingSerializer,
 )
 
@@ -124,14 +125,31 @@ class ListingListView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
+        query = ListingSearchQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        params = query.validated_data
+
         now = timezone.now()
         Listing.finalize_ended_auctions(now=now)
         Listing.objects.filter(
             status="scheduled", starts_at__lte=now, ends_at__gt=now
         ).update(status="active")
-        queryset = Listing.objects.annotate(_bid_count=Count("bids")).order_by("-starts_at")
+        queryset = Listing.objects.annotate(_bid_count=Count("bids"))
         if not request.user.is_staff:
             queryset = queryset.exclude(status__in=["draft", "cancelled"])
+
+        if params.get("q"):
+            queryset = queryset.filter(title__icontains=params["q"])
+        if params.get("category"):
+            queryset = queryset.filter(category=params["category"])
+        if params.get("status"):
+            queryset = queryset.filter(status=params["status"])
+        if params.get("min_price") is not None:
+            queryset = queryset.filter(current_highest_bid__gte=params["min_price"])
+        if params.get("max_price") is not None:
+            queryset = queryset.filter(current_highest_bid__lte=params["max_price"])
+        queryset = queryset.order_by(params.get("ordering", "-starts_at"))
+
         serializer = ListingSerializer(queryset, many=True)
         return Response(serializer.data)
 
@@ -491,6 +509,9 @@ class BidSubmitView(BidImmutableMixin, APIView):
     """Submit a bid on an active auction (authenticated + verified)."""
 
     permission_classes = [IsEmailVerified]
+    # delete/patch are kept in the allowlist (not dropped) so BidImmutableMixin's
+    # explicit reject-and-log handlers still run instead of a bare 405 (NFSR-AV-03).
+    http_method_names = ["post", "delete", "patch"]
 
     def post(self, request, listing_id):
         serializer = BidSubmitSerializer(data=request.data)

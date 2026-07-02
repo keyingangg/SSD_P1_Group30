@@ -1,7 +1,9 @@
 """File upload validators."""
 import os
 
+import clamd
 import magic
+from django.conf import settings
 from rest_framework.exceptions import ValidationError
 
 # Allowlist of permitted image types: MIME type -> permitted file extensions.
@@ -53,12 +55,26 @@ def validate_file_extension(filename, detected_mime=None):
 
 
 def scan_for_malware(file_obj):
-    """Scan uploaded file content for malware (NFSR-C-07).
+    """Scan uploaded file content for malware via a ClamAV daemon (NFSR-C-07).
 
-    TODO: integrate a scanning engine (e.g. ClamAV via clamd) and raise
-    ValidationError on a positive match. Currently a no-op placeholder.
+    Fails closed: if the ClamAV daemon can't be reached at all (down,
+    misconfigured, network issue), the upload is rejected rather than let
+    through unscanned.
     """
-    pass
+    file_obj.seek(0)
+    try:
+        client = clamd.ClamdNetworkSocket(host=settings.CLAMD_HOST, port=settings.CLAMD_PORT)
+        result = client.instream(file_obj)
+    except Exception:
+        raise ValidationError("File could not be scanned for malware. Please try again later.")
+    finally:
+        file_obj.seek(0)
+
+    status, signature = result.get("stream", ("ERROR", None))
+    if status == "FOUND":
+        raise ValidationError("File failed malware scan.")
+    if status != "OK":
+        raise ValidationError("File could not be scanned for malware. Please try again later.")
 
 
 def validate_file_size(file_obj, max_bytes=None):

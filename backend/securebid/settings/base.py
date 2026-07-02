@@ -59,7 +59,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "core.middleware.RBACMiddleware",
-    # core.middleware.SecurityHeadersMiddleware,  # TODO: enable custom security headers
+    "core.middleware.SecurityHeadersMiddleware",
     # django-axes must be the last authentication-related middleware.
     "axes.middleware.AxesMiddleware",
 ]
@@ -133,6 +133,14 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL")
 # (see core/sql/storage_rls_policies.sql).
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY")
 SUPABASE_STORAGE_BUCKET = os.environ.get("SUPABASE_STORAGE_BUCKET", "auction-images")
+
+# --------------------------------------------------------------------------
+# ClamAV malware scanning (NFSR-C-07) — requires a clamd daemon reachable at
+# CLAMD_HOST:CLAMD_PORT. Uploads are rejected if the daemon is unreachable
+# (fail closed) rather than silently skipping the scan.
+# --------------------------------------------------------------------------
+CLAMD_HOST = os.environ.get("CLAMD_HOST", "localhost")
+CLAMD_PORT = int(os.environ.get("CLAMD_PORT", "3310"))
 
 # --------------------------------------------------------------------------
 # Database (Supabase PostgreSQL over TLS)

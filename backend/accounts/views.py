@@ -306,6 +306,7 @@ class LoginView(APIView):
     """Authenticate a verified user and start a session."""
 
     permission_classes = [AllowAny]
+    http_method_names = ["post"]
 
     def post(self, request):
         start_time = time.perf_counter()
@@ -783,6 +784,7 @@ class DeleteAccountView(APIView):
     """
 
     permission_classes = [IsAuthenticated]
+    http_method_names = ["post"]
 
     def post(self, request):
         user = request.user
@@ -826,6 +828,16 @@ class DeleteAccountView(APIView):
                 )
                 return Response({"detail": "Invalid MFA code."}, status=400)
 
+        # Step 3: block deletion while an unpaid winning bid exists (SFR-05b) —
+        # otherwise the seller is left with no way to collect payment.
+        from payments.models import Order
+
+        if Order.objects.filter(winner_id=user.id, fulfillment_status="pending_payment").exists():
+            return Response(
+                {"detail": "You have an outstanding unpaid order. Please complete or cancel payment before deleting your account."},
+                status=400,
+            )
+
         email = user.email
         ip = get_client_ip(request)
         ua = request.META.get("HTTP_USER_AGENT", "")
@@ -867,6 +879,34 @@ class AdminUserListView(APIView):
         return Response(serializer.data)
 
 
+def _get_admin_target(request, user_id):
+    """Return (user, error_response) — one of the two will be None.
+
+    Guards shared by every admin action that operates on another user's
+    account: cannot act on your own account, a superuser account, or an
+    already-anonymised account.
+    """
+    if not request.user.is_staff:
+        return None, Response({"detail": "Admin access required."}, status=403)
+    try:
+        target = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        return None, Response({"detail": "User not found."}, status=404)
+    if target.pk == request.user.pk:
+        return None, Response(
+            {"detail": "You cannot perform this action on your own account."},
+            status=400,
+        )
+    if target.is_superuser:
+        return None, Response(
+            {"detail": "Superuser accounts cannot be modified here."},
+            status=403,
+        )
+    if target.is_anonymised:
+        return None, Response({"detail": "User not found."}, status=404)
+    return target, None
+
+
 class AdminUserDetailView(APIView):
     """Lock/unlock or delete a single user account (staff only).
 
@@ -877,32 +917,11 @@ class AdminUserDetailView(APIView):
 
     permission_classes = [IsAdminUser]
     staff_only = True
-
-    def _get_target(self, request, user_id):
-        """Return (user, error_response) — one of the two will be None."""
-        if not request.user.is_staff:
-            return None, Response({"detail": "Admin access required."}, status=403)
-        try:
-            target = User.objects.get(pk=user_id)
-        except User.DoesNotExist:
-            return None, Response({"detail": "User not found."}, status=404)
-        if target.pk == request.user.pk:
-            return None, Response(
-                {"detail": "You cannot perform this action on your own account."},
-                status=400,
-            )
-        if target.is_superuser:
-            return None, Response(
-                {"detail": "Superuser accounts cannot be modified here."},
-                status=403,
-            )
-        if target.is_anonymised:
-            return None, Response({"detail": "User not found."}, status=404)
-        return target, None
+    http_method_names = ["patch", "delete"]
 
     def patch(self, request, user_id):
         """Toggle is_active (lock / unlock)."""
-        target, err = self._get_target(request, user_id)
+        target, err = _get_admin_target(request, user_id)
         if err:
             return err
 
@@ -929,7 +948,7 @@ class AdminUserDetailView(APIView):
 
     def delete(self, request, user_id):
         """Permanently delete a user account."""
-        target, err = self._get_target(request, user_id)
+        target, err = _get_admin_target(request, user_id)
         if err:
             return err
 
@@ -954,6 +973,38 @@ class AdminUserDetailView(APIView):
         anonymise_user_data(target)
         logger.info("Admin %s deleted and anonymised account %s", request.user.email, email)
         return Response({"detail": "Account deleted."}, status=200)
+
+
+class AdminTerminateSessionsView(APIView):
+    """Kill a user's live session(s) without locking or deleting the account (FSR-C-07)."""
+
+    permission_classes = [IsAdminUser]
+    staff_only = True
+    http_method_names = ["post"]
+
+    def post(self, request, user_id):
+        target, err = _get_admin_target(request, user_id)
+        if err:
+            return err
+
+        invalidate_all_user_sessions(target)
+        ip = get_client_ip(request)
+        ua = request.META.get("HTTP_USER_AGENT", "")
+        log_action(
+            user=request.user,
+            action="admin_session_terminated",
+            resource_type="User",
+            resource_id=target.id,
+            ip_address=ip,
+            user_agent=ua,
+            device_fingerprint=_device_fingerprint(ip, ua),
+            role="staff" if request.user.is_staff else "user",
+            request_method=request.method,
+            endpoint_path=request.path,
+            metadata={"target_email": target.email},
+        )
+        logger.info("Admin %s terminated sessions for %s", request.user.email, target.email)
+        return Response({"detail": "Sessions terminated."}, status=200)
 
 
 # ---------------------------------------------------------------------------
