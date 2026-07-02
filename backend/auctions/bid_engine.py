@@ -15,8 +15,19 @@ from .models import Bid, Listing
 logger = logging.getLogger("securebid")
 
 
-def _broadcast_bid(listing_id: str, amount: str, anonymous_identifier: str) -> None:
-    """Push an anonymised bid-update message to all WebSocket viewers of a listing."""
+def _broadcast_bid(
+    listing_id: str,
+    bid_id: str,
+    amount: str,
+    anonymous_identifier: str,
+    submitted_at: str,
+    is_winning: bool,
+) -> None:
+    """Push an anonymised bid-update message to all WebSocket viewers of a listing.
+
+    Sends exactly one message per bid so the frontend never sees duplicates.
+    bidder_id is intentionally omitted (NFSR-C-04 / SFR-11f).
+    """
     channel_layer = get_channel_layer()
     if channel_layer is None:
         logger.warning("No channel layer configured — skipping bid broadcast for listing %s", listing_id)
@@ -27,11 +38,14 @@ def _broadcast_bid(listing_id: str, amount: str, anonymous_identifier: str) -> N
         {
             "type": "bid_update",
             "data": {
-                "type": "bid_update",
+                "event": "bid_placed",
+                "bid_id": bid_id,
                 "listing_id": listing_id,
+                "amount": amount,
                 "current_highest_bid": amount,
                 "anonymous_identifier": anonymous_identifier,
-                # bidder_id intentionally omitted (NFSR-C-04 · SFR-11f)
+                "submitted_at": submitted_at,
+                "is_winning": is_winning,
             },
         },
     )
@@ -129,8 +143,11 @@ def submit_bid(listing_id, user, amount, ip_address=None, user_agent=""):
     # Broadcast outside the atomic block so clients only see committed state (NFR-02)
     _broadcast_bid(
         listing_id=str(listing_id),
+        bid_id=str(bid.id),
         amount=str(bid_amount),
         anonymous_identifier=anonymous_identifier,
+        submitted_at=bid.submitted_at.isoformat(),
+        is_winning=bid.is_winning,
     )
 
     return bid, listing

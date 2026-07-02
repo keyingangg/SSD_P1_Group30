@@ -13,9 +13,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser
 
-from accounts.permissions import IsAdminUser, IsEmailVerified, IsEmailVerifiedSilent
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from accounts.permissions import IsAdminUser, IsEmailVerified, IsEmailVerifiedSilent
 
 from core.audit import log_action, device_fingerprint as _device_fingerprint
 from core.storage import upload_image
@@ -27,10 +27,33 @@ from .serializers import (
     BidSubmitSerializer,
     ListingAdminSerializer,
     ListingCreateSerializer,
+    ListingSearchQuerySerializer,
     ListingSerializer,
 )
 
 _audit_logger = logging.getLogger(__name__)
+
+
+def _unauth_ip_key(group, request):
+    """Rate-limit key: the client's IP address.
+
+    Always returns a string — django-ratelimit's key callable does not
+    support returning None to skip the check (it crashes on non-string
+    values). Skipping for authenticated users is done via `_unauth_only_rate`
+    instead, which is the mechanism the library actually supports.
+    """
+    return request.META.get("REMOTE_ADDR", "")
+
+
+def _unauth_only_rate(group, request):
+    """Rate for unauthenticated requests only.
+
+    Returns None for authenticated users so django-ratelimit skips the check
+    entirely — authenticated users are already throttled on write actions.
+    """
+    if getattr(request.user, "is_authenticated", False):
+        return None
+    return "30/m"
 
 
 class BidImmutableMixin:
@@ -74,8 +97,26 @@ class BidImmutableMixin:
 logger = logging.getLogger("securebid")
 
 
+def _broadcast_catalogue_update():
+    """Push a catalogue-changed event via the channel layer.
+
+    No-op when the channel layer is not configured (e.g. plain WSGI runserver).
+    Exceptions are swallowed so a missing channel layer never breaks REST calls.
+    """
+    channel_layer = get_channel_layer()
+    if channel_layer is None:
+        return
+    try:
+        async_to_sync(channel_layer.group_send)(
+            "catalogue",
+            {"type": "catalogue.update", "data": {"event": "catalogue_changed"}},
+        )
+    except Exception:
+        pass
+
+
 @method_decorator(
-    ratelimit(key="ip", rate="60/m", method="GET", block=True),
+    ratelimit(key=_unauth_ip_key, rate=_unauth_only_rate, method="GET", block=True),
     name="get",
 )
 class ListingListView(APIView):
@@ -84,18 +125,39 @@ class ListingListView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
+        query = ListingSearchQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        params = query.validated_data
+
         now = timezone.now()
         Listing.finalize_ended_auctions(now=now)
         Listing.objects.filter(
             status="scheduled", starts_at__lte=now, ends_at__gt=now
         ).update(status="active")
-        queryset = Listing.objects.all().order_by("-starts_at")
+        queryset = Listing.objects.annotate(_bid_count=Count("bids"))
         if not request.user.is_staff:
             queryset = queryset.exclude(status__in=["draft", "cancelled"])
+
+        if params.get("q"):
+            queryset = queryset.filter(title__icontains=params["q"])
+        if params.get("category"):
+            queryset = queryset.filter(category=params["category"])
+        if params.get("status"):
+            queryset = queryset.filter(status=params["status"])
+        if params.get("min_price") is not None:
+            queryset = queryset.filter(current_highest_bid__gte=params["min_price"])
+        if params.get("max_price") is not None:
+            queryset = queryset.filter(current_highest_bid__lte=params["max_price"])
+        queryset = queryset.order_by(params.get("ordering", "-starts_at"))
+
         serializer = ListingSerializer(queryset, many=True)
         return Response(serializer.data)
 
 
+@method_decorator(
+    ratelimit(key=_unauth_ip_key, rate=_unauth_only_rate, method="GET", block=True),
+    name="get",
+)
 class ListingDetailView(APIView):
     """View a single published listing's details (public)."""
 
@@ -190,6 +252,22 @@ class ListingCreateView(APIView):
             metadata={"listing_title": listing.title, "save_as_draft": save_as_draft},
         )
 
+        log_action(
+            user=request.user,
+            action="listing_created",
+            resource_type="Listing",
+            resource_id=listing.id,
+            ip_address=request.META.get("REMOTE_ADDR"),
+            user_agent=request.META.get("HTTP_USER_AGENT", ""),
+            device_fingerprint=_device_fingerprint(request.META.get("REMOTE_ADDR"), request.META.get("HTTP_USER_AGENT", "")),
+            request_method=request.method,
+            endpoint_path=request.path,
+            metadata={"listing_title": listing.title, "save_as_draft": save_as_draft},
+        )
+
+        if not save_as_draft:
+            _broadcast_catalogue_update()
+
         return Response({"detail": "Listing created.", "id": listing.id, "image_key": listing.image_key}, status=201)
 
 
@@ -210,14 +288,21 @@ class ListingUpdateView(APIView):
         except Listing.DoesNotExist:
             return Response({"detail": "Listing not found."}, status=404)
 
-        if listing.status == "active":
-            return Response(
-                {"detail": "This listing cannot be modified while the auction is live. Cancel it first."},
-                status=409,
-            )
-        if listing.bids.exists() and listing.status != "cancelled":
+        has_bids = listing.bids.exists()
+        saving_as_draft = request.data.get("save_as_draft", False)
+
+        # Bids have been placed — no further changes allowed (except on cancelled listings)
+        if has_bids and listing.status != "cancelled":
             return Response(
                 {"detail": "This listing cannot be modified because bids have already been placed. Cancel the auction first, then make changes."},
+                status=409,
+            )
+
+        # Active (live) auction with no bids: allow save-as-draft to pull it back,
+        # but block re-publishing (admins must cancel first to change the schedule).
+        if listing.status == "active" and not saving_as_draft:
+            return Response(
+                {"detail": "This listing cannot be modified while the auction is live. Cancel it first."},
                 status=409,
             )
 
@@ -283,6 +368,9 @@ class ListingUpdateView(APIView):
             endpoint_path=request.path,
             metadata={"save_as_draft": save_as_draft},
         )
+
+        if not save_as_draft:
+            _broadcast_catalogue_update()
 
         return Response({"detail": "Listing updated."}, status=200)
 
@@ -392,6 +480,18 @@ class ListingCancelView(APIView):
             },
         )
 
+        # Broadcast cancellation to listing viewers and catalogue
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f"auction_{listing.id}",
+                {
+                    "type": "auction.closed",
+                    "data": {"event": "auction_cancelled", "status": "cancelled"},
+                },
+            )
+        _broadcast_catalogue_update()
+
         return Response(
             {
                 "detail": "Auction cancelled.",
@@ -409,6 +509,9 @@ class BidSubmitView(BidImmutableMixin, APIView):
     """Submit a bid on an active auction (authenticated + verified)."""
 
     permission_classes = [IsEmailVerified]
+    # delete/patch are kept in the allowlist (not dropped) so BidImmutableMixin's
+    # explicit reject-and-log handlers still run instead of a bare 405 (NFSR-AV-03).
+    http_method_names = ["post", "delete", "patch"]
 
     def post(self, request, listing_id):
         serializer = BidSubmitSerializer(data=request.data)
@@ -528,20 +631,7 @@ class BidSubmitView(BidImmutableMixin, APIView):
                 status=500,
             )
         # bid_placed audit log is written inside the atomic block in submit_bid
-
-        channel_layer = get_channel_layer()
-        async_to_sync(channel_layer.group_send)(
-            f"auction_{listing_id}",
-            {
-                "type": "bid_update",
-                "data": {
-                    "listing_id": str(listing.id),
-                    "current_highest_bid": str(listing.current_highest_bid),
-                    "anonymous_identifier": bid.anonymous_identifier,
-                    "submitted_at": bid.submitted_at.isoformat(),
-                },
-            },
-        )
+        # WS broadcast is handled by _broadcast_bid inside submit_bid — no extra sends needed.
 
         return Response(
             {
@@ -776,3 +866,80 @@ class ListingImageUploadView(APIView):
         # raises is converted to a 400 by core.exceptions.custom_exception_handler.
         object_key = upload_image(f, f.name)
         return Response({"key": object_key}, status=201)
+
+
+# ---------------------------------------------------------------------------
+# Admin overview
+# ---------------------------------------------------------------------------
+
+class AdminOverviewView(APIView):
+    """Return summary stats for the admin dashboard (staff only)."""
+
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        from django.contrib.auth import get_user_model
+        from core.models import AuditLog
+        from payments.models import Order
+
+        User = get_user_model()
+        now = timezone.now()
+        today = now.date()
+
+        active_listings = Listing.objects.filter(status="active")
+        pending_payment_count = Order.objects.filter(fulfillment_status="pending_payment").count()
+
+        bids_today = Bid.objects.filter(submitted_at__date=today).count()
+        registered_users = User.objects.filter(is_anonymised=False).count()
+
+        recent_audit = (
+            AuditLog.objects.select_related("user")
+            .order_by("-timestamp")[:10]
+        )
+
+        _label_map = {
+            "login_success": "Login successful",
+            "login_failed": "Login failed",
+            "logout": "Logged out",
+            "mfa_login_success": "MFA login successful",
+            "mfa_login_failed": "MFA login failed",
+            "bid_placed": "Bid placed",
+            "bid_rejected": "Bid rejected",
+            "admin_account_toggled": "Account locked/unlocked",
+            "admin_account_deleted": "Account deleted",
+            "admin_listing_status_changed": "Listing status changed",
+        }
+
+        audit_events = []
+        for e in recent_audit:
+            actor = e.user.email if e.user else "System"
+            is_admin = (e.user.is_staff or e.user.is_superuser) if e.user else False
+            label = _label_map.get(e.action, e.action.replace("_", " ").title())
+            audit_events.append({
+                "actor": actor,
+                "action": label,
+                "timestamp": e.timestamp.isoformat(),
+                "is_admin": is_admin,
+            })
+
+        active_auction_data = []
+        for listing in active_listings.order_by("ends_at")[:10]:
+            active_auction_data.append({
+                "id": str(listing.id),
+                "lot": str(listing.id)[:8].upper(),
+                "name": listing.title,
+                "bid": str(listing.current_highest_bid),
+                "ends_at": listing.ends_at.isoformat() if listing.ends_at else None,
+            })
+
+        return Response({
+            "stats": {
+                "active_listings": active_listings.count(),
+                "pending_payments": pending_payment_count,
+                "bids_today": bids_today,
+                "registered_users": registered_users,
+            },
+            "audit_events": audit_events,
+            "active_auctions": active_auction_data,
+            "pending_orders_count": pending_payment_count,
+        })

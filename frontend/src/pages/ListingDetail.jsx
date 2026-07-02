@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { getListingDetail } from "../api/auctions.js";
@@ -41,17 +41,20 @@ export default function ListingDetail() {
   const [error, setError] = useState("");
   const [rejectedMinBid, setRejectedMinBid] = useState(null);
   const [conflictMinBid, setConflictMinBid] = useState(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const closeSyncRef = useRef(false);
   const storageKey = `bid_placed_${id}`;
   const [lastPlacedBid, setLastPlacedBid] = useState(() => {
     const saved = localStorage.getItem(storageKey);
     return saved ? Number(saved) : null;
   });
-  const { bids } = useBidFeed(id);
+  const { bids, lastMessage, isPolling } = useBidFeed(id);
 
-  async function refreshListing() {
+  const refreshListing = useCallback(async () => {
     const data = await getListingDetail(id);
     setListing(data);
-  }
+    return data;
+  }, [id]);
 
   function handleBidPlaced(amount) {
     localStorage.setItem(storageKey, amount);
@@ -75,7 +78,7 @@ export default function ListingDetail() {
       setLoading(true);
       setError("");
       try {
-        const data = await getListingDetail(id);
+        const data = await refreshListing();
         if (active) setListing(data);
       } catch (err) {
         if (!active) return;
@@ -86,11 +89,40 @@ export default function ListingDetail() {
     }
     load();
     return () => { active = false; };
-  }, [id]);
+  }, [id, refreshListing]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  // Handle incoming WebSocket messages
+  useEffect(() => {
+    if (!lastMessage) return;
+    if (lastMessage.event === "bid_placed") {
+      // Update price immediately without a round-trip
+      setListing(prev => prev ? {
+        ...prev,
+        current_highest_bid: lastMessage.current_highest_bid ?? prev.current_highest_bid,
+      } : prev);
+    } else if (lastMessage.event === "auction_cancelled" || lastMessage.event === "auction_ended") {
+      // Status change — fetch the full updated listing
+      refreshListing();
+    }
+  }, [lastMessage]);
+
+  // Fallback: poll listing + bids every 5 s when WebSocket is unavailable
+  useEffect(() => {
+    if (!id || !isPolling) return;
+    const interval = setInterval(refreshListing, 5000);
+    return () => clearInterval(interval);
+  }, [id, isPolling]);
 
   const runtimeStatus = String(listing?.status || "").toLowerCase();
   const displayStatus = String(listing?.display_status || "").toLowerCase();
-  const nowMs = Date.now();
   const startsAtMs = listing?.starts_at ? new Date(listing.starts_at).getTime() : NaN;
   const endsAtMs = listing?.ends_at ? new Date(listing.ends_at).getTime() : NaN;
 
@@ -105,7 +137,14 @@ export default function ListingDetail() {
       (Number.isFinite(startsAtMs) && Number.isFinite(endsAtMs) && startsAtMs <= nowMs && nowMs < endsAtMs));
 
   const category = listing?.category || null;
-  const currentBid = listing?.current_highest_bid || listing?.starting_price;
+  const latestLiveBidAmount = Number(bids[0]?.amount);
+  const hasLatestLiveBid = Number.isFinite(latestLiveBidAmount) && latestLiveBidAmount > 0;
+  const currentBid = hasLatestLiveBid
+    ? latestLiveBidAmount
+    : (listing?.current_highest_bid || listing?.starting_price);
+  const listingForBidForm = listing
+    ? { ...listing, current_highest_bid: currentBid }
+    : listing;
 
   // Closed-state user context — populated if the backend returns these fields
   const userWon = listing?.user_won === true;
@@ -115,6 +154,51 @@ export default function ListingDetail() {
   const winnerDiff = userParticipated && !userWon && currentBid
     ? Number(currentBid) - userHighestBid
     : 0;
+
+  const transportStatus = isPolling ? "Offline" : "";
+
+  useEffect(() => {
+    if (!Number.isFinite(endsAtMs)) {
+      closeSyncRef.current = false;
+      return;
+    }
+
+    if (nowMs < endsAtMs) {
+      closeSyncRef.current = false;
+      return;
+    }
+
+    if (closeSyncRef.current) return;
+    if (runtimeStatus === "ended" || runtimeStatus === "cancelled") {
+      closeSyncRef.current = true;
+      return;
+    }
+
+    closeSyncRef.current = true;
+    refreshListing().catch(() => {
+      closeSyncRef.current = false;
+    });
+  }, [endsAtMs, nowMs, refreshListing, runtimeStatus]);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      refreshListing().catch(() => {
+        /* keep existing UI until next successful sync */
+      });
+    };
+
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
+  }, [refreshListing]);
+
+  useEffect(() => {
+    if (!isClosed) return;
+
+    localStorage.removeItem(storageKey);
+    setLastPlacedBid(null);
+    setRejectedMinBid(null);
+    setConflictMinBid(null);
+  }, [isClosed, storageKey]);
 
   return (
     <main className="ld-page">
@@ -143,7 +227,7 @@ export default function ListingDetail() {
           {/* Header */}
           <div className="ld-header">
 <h1 className="ld-header-title">{listing.title || "Untitled Item"}</h1>
-            {isClosed && <span className="ld-closed-badge">Closed</span>}
+            {isClosed && <span className="ld-closed-badge">{runtimeStatus === "cancelled" ? "Cancelled" : "Closed"}</span>}
             {isLive && (
               <span className="ld-live-badge">
                 <span className="ld-live-dot" />
@@ -211,10 +295,29 @@ export default function ListingDetail() {
                 </div>
               )}
 
+              {/* ── CANCELLED STATE (outside grey panel) ── */}
+              {runtimeStatus === "cancelled" && (
+                <>
+                  <div className="ld-status-bar">
+                    <span className="ld-status-closed">
+                      <span className="ld-status-dot-grey" />
+                      Auction Cancelled
+                    </span>
+                  </div>
+                  <div className="ld-cancelled-banner">
+                    <div className="ld-cancelled-icon">✕</div>
+                    <p className="ld-cancelled-tag">Auction Cancelled</p>
+                    <p className="ld-cancelled-title">This lot has been withdrawn</p>
+                    <p className="ld-cancelled-desc">This auction was cancelled by the organiser. All bids have been voided and no charges apply.</p>
+                  </div>
+                  <a href="/auctions" className="ld-cta-btn" style={{ marginTop: "1rem", display: "block" }}>Browse Similar Lots</a>
+                </>
+              )}
+
               <div className="ld-panel">
 
                 {/* ── CLOSED STATE ── */}
-                {isClosed ? (
+                {isClosed && runtimeStatus !== "cancelled" ? (
                   <>
                     {/* Status bar */}
                     <div className="ld-status-bar">
@@ -230,76 +333,78 @@ export default function ListingDetail() {
                       )}
                     </div>
 
-                    {/* Hammer price */}
-                    <div className="ld-panel-section">
-                      <div className="ld-bid-label">Hammer Price</div>
-                      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "1rem" }}>
-                        <div className="ld-bid-number">{formatSGD(currentBid)}</div>
-                        {bidCount !== null && (
-                          <div className="ld-bid-count">{bidCount} bids placed</div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* User-specific banner */}
-                    {userWon && (
-                      <div className="ld-panel-section">
-                        <div className="ld-banner-win">
-                          <span className="ld-banner-win-dot" />
-                          <span>
-                            Congratulations — you placed the winning bid of {formatSGD(currentBid)}.
-                            Complete checkout to claim this lot within 72 hours.
-                          </span>
-                        </div>
-                        <div style={{ marginTop: 14 }}>
-                          <a href="#checkout" className="ld-cta-btn">Proceed to Checkout →</a>
-                          <p className="ld-cta-note">Payment must be completed within 72 hours of auction close</p>
-                          <a href="/auctions" className="ld-cta-link">Browse Similar Lots</a>
-                        </div>
-                      </div>
-                    )}
-
-                    {userParticipated && !userWon && (
-                      <div className="ld-panel-section">
-                        <div className="ld-banner-outbid">
-                          <span className="ld-banner-outbid-dot" />
-                          <span>
-                            You were outbid. Your final offer of {formatSGD(userHighestBid)} did not win this lot.
-                            The hammer price was {formatSGD(currentBid)}.
-                          </span>
-                        </div>
-                        <div className="ld-your-bid-section">
-                          <div className="ld-your-bid-label-sm">Your Highest Bid</div>
-                          <div className="ld-your-bid-row">
-                            <span className="ld-your-bid-number">{formatSGD(userHighestBid)}</span>
-                            {winnerDiff > 0 && (
-                              <span className="ld-your-bid-note">Winning bid was {formatSGD(winnerDiff)} higher</span>
+                    <>
+                        {/* Hammer price */}
+                        <div className="ld-panel-section">
+                          <div className="ld-bid-label">Hammer Price</div>
+                          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: "1rem" }}>
+                            <div className="ld-bid-number">{formatSGD(currentBid)}</div>
+                            {bidCount !== null && (
+                              <div className="ld-bid-count">{bidCount} bids placed</div>
                             )}
                           </div>
                         </div>
-                        <div style={{ marginTop: 14 }}>
-                          <a href="/auctions" className="ld-cta-btn">Browse Similar Lots</a>
-                          <p className="ld-cta-note">Discover other lots in {category || "Auctions"} matching your interest</p>
+
+                        {/* User-specific banner */}
+                        {userWon && (
+                          <div className="ld-panel-section">
+                            <div className="ld-banner-win">
+                              <span className="ld-banner-win-dot" />
+                              <span>
+                                Congratulations — you placed the winning bid of {formatSGD(currentBid)}.
+                                Complete checkout to claim this lot within 72 hours.
+                              </span>
+                            </div>
+                            <div style={{ marginTop: 14 }}>
+                              <a href="#checkout" className="ld-cta-btn">Proceed to Checkout →</a>
+                              <p className="ld-cta-note">Payment must be completed within 72 hours of auction close</p>
+                              <a href="/auctions" className="ld-cta-link">Browse Similar Lots</a>
+                            </div>
+                          </div>
+                        )}
+
+                        {userParticipated && !userWon && (
+                          <div className="ld-panel-section">
+                            <div className="ld-banner-outbid">
+                              <span className="ld-banner-outbid-dot" />
+                              <span>
+                                You were outbid. Your final offer of {formatSGD(userHighestBid)} did not win this lot.
+                                The hammer price was {formatSGD(currentBid)}.
+                              </span>
+                            </div>
+                            <div className="ld-your-bid-section">
+                              <div className="ld-your-bid-label-sm">Your Highest Bid</div>
+                              <div className="ld-your-bid-row">
+                                <span className="ld-your-bid-number">{formatSGD(userHighestBid)}</span>
+                                {winnerDiff > 0 && (
+                                  <span className="ld-your-bid-note">Winning bid was {formatSGD(winnerDiff)} higher</span>
+                                )}
+                              </div>
+                            </div>
+                            <div style={{ marginTop: 14 }}>
+                              <a href="/auctions" className="ld-cta-btn">Browse Similar Lots</a>
+                              <p className="ld-cta-note">Discover other lots in {category || "Auctions"} matching your interest</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {!userParticipated && (
+                          <div className="ld-panel-section">
+                            <a href="/auctions" className="ld-cta-btn">Browse Similar Lots</a>
+                          </div>
+                        )}
+
+                        {/* Final bid history */}
+                        <div className="ld-panel-section">
+                          <div className="ld-history-header">
+                            <span className="ld-history-title">Final Bid History</span>
+                            <span className="ld-history-note">All bids are final</span>
+                          </div>
+                          <BidFeed listingId={id} isClosed={isClosed} userHighestBid={userHighestBid} />
                         </div>
-                      </div>
-                    )}
-
-                    {!userParticipated && (
-                      <div className="ld-panel-section">
-                        <a href="/auctions" className="ld-cta-btn">Browse Similar Lots</a>
-                      </div>
-                    )}
-
-                    {/* Final bid history */}
-                    <div className="ld-panel-section">
-                      <div className="ld-history-header">
-                        <span className="ld-history-title">Final Bid History</span>
-                        <span className="ld-history-note">All bids are final</span>
-                      </div>
-                      <BidFeed listingId={id} isClosed={isClosed} userHighestBid={userHighestBid} />
-                    </div>
+                    </>
                   </>
-                ) : (
+                ) : !isClosed ? (
                   /* ── LIVE / UPCOMING STATE ── */
                   <>
                     {/* Status bar */}
@@ -311,7 +416,7 @@ export default function ListingDetail() {
                             Auction Live
                           </span>
                           <span className="ld-status-sep">·</span>
-                          <span className="ld-status-info" style={{ color: "#3a7d55" }}>WebSocket connected</span>
+                          <span className="ld-status-info" style={{ color: isPolling ? "#b8a04a" : "#3a7d55" }}>{isPolling ? "Polling (5s)" : "Live updates"}</span>
                         </>
                       ) : (
                         <>
@@ -368,7 +473,7 @@ export default function ListingDetail() {
                           <div className="ld-panel-section">
                             <BidForm
                               listingId={id}
-                              listing={listing}
+                              listing={listingForBidForm}
                               onBidPlaced={(amt) => { setRejectedMinBid(null); setConflictMinBid(null); handleBidPlaced(amt); }}
                               onBidRejected={(minBid) => { setConflictMinBid(null); setRejectedMinBid(minBid); }}
                               onBidConflict={(minBid) => { setRejectedMinBid(null); setConflictMinBid(minBid); refreshListing(); }}
@@ -436,7 +541,7 @@ export default function ListingDetail() {
                       </>
                     )}
                   </>
-                )}
+                ) : null}
               </div>
             </div>
           </div>

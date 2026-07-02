@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import AdminLayout from "../../components/admin/AdminLayout.jsx";
 import { deleteAdminUser, getAdminUsers, sendStaffInvite, toggleUserLock } from "../../api/auth.js";
+import { useAuth } from "../../context/AuthContext.jsx";
 
 const ROLE_OPTIONS   = ["All", "Superuser", "Staff", "Bidder"];
 const STATUS_OPTIONS = ["All", "Active", "Pending", "Locked"];
@@ -21,7 +22,7 @@ const STATUS_COLOR = {
 const inputStyle = {
   padding: ".5rem .8rem",
   border: "1px solid rgba(27,26,23,.2)",
-  borderRadius: 4,
+  borderRadius: 0,
   font: "inherit",
   fontSize: ".82rem",
   background: "var(--input-bg)",
@@ -39,7 +40,7 @@ function formatDate(iso) {
 function Badge({ role }) {
   return (
     <span style={{
-      display: "inline-block", padding: ".15rem .55rem", borderRadius: 3,
+      display: "inline-block", padding: ".15rem .55rem", borderRadius: 0,
       fontSize: ".68rem", fontWeight: 600, letterSpacing: ".06em",
       ...ROLE_STYLE[role],
     }}>
@@ -68,7 +69,7 @@ function ActionBtn({ onClick, disabled, children, danger }) {
         fontSize: ".72rem",
         fontWeight: 600,
         border: `1px solid ${danger ? "var(--danger)" : "rgba(27,26,23,.2)"}`,
-        borderRadius: 3,
+        borderRadius: 0,
         background: "transparent",
         color: danger ? "var(--danger)" : "var(--ink)",
         cursor: disabled ? "not-allowed" : "pointer",
@@ -82,6 +83,8 @@ function ActionBtn({ onClick, disabled, children, danger }) {
 }
 
 export default function AdminUsers() {
+  const { user: currentUser } = useAuth();
+
   // ── Invite form ────────────────────────────────────────────────────────────
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviting, setInviting]       = useState(false);
@@ -101,19 +104,24 @@ export default function AdminUsers() {
   const [statusFilter, setStatus] = useState("All");
 
   // ── Data fetching ──────────────────────────────────────────────────────────
-  const loadUsers = async () => {
-    setLoading(true);
-    setFetchErr(null);
+  const loadUsers = useCallback(async (showSpinner = false) => {
+    if (showSpinner) { setLoading(true); setFetchErr(null); }
     try {
       setUsers(await getAdminUsers());
     } catch {
-      setFetchErr("Could not load users. Please refresh.");
+      if (showSpinner) setFetchErr("Could not load users. Please refresh.");
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { loadUsers(); }, []);
+  useEffect(() => { loadUsers(true); }, [loadUsers]);
+
+  // No WebSocket exists for user events — poll every 30 s as a background refresh
+  useEffect(() => {
+    const id = setInterval(() => loadUsers(), 30000);
+    return () => clearInterval(id);
+  }, [loadUsers]);
 
   // ── Invite handler ─────────────────────────────────────────────────────────
   const handleInvite = async (e) => {
@@ -124,7 +132,7 @@ export default function AdminUsers() {
       const data = await sendStaffInvite(inviteEmail);
       setInviteMsg({ type: "success", text: data.detail });
       setInviteEmail("");
-      loadUsers();
+      loadUsers(true);
     } catch (err) {
       setInviteMsg({
         type: "error",
@@ -286,6 +294,7 @@ export default function AdminUsers() {
                 const confirmingDelete = busy === "confirm-delete";
                 const isLocked = u.status === "Locked";
                 const isProtected = u.role === "Superuser";
+                const isSelf = u.id === currentUser?.id;
 
                 return (
                   <tr key={u.id} style={{ borderBottom: "1px solid rgba(27,26,23,.06)" }}>
@@ -297,8 +306,8 @@ export default function AdminUsers() {
                     <td style={{ padding: ".7rem 1.25rem" }}><StatusDot status={u.status} /></td>
                     <td style={{ padding: ".7rem 1.25rem", opacity: .5 }}>{formatDate(u.created_at)}</td>
                     <td style={{ padding: ".7rem 1.25rem" }}>
-                      {isProtected ? (
-                        <span style={{ fontSize: ".72rem", opacity: .35 }}>Protected</span>
+                      {isProtected || isSelf ? (
+                        <span style={{ fontSize: ".72rem", opacity: .35 }}>{isSelf ? "You" : "Protected"}</span>
                       ) : confirmingDelete ? (
                         /* Inline delete confirmation */
                         <span style={{ display: "inline-flex", gap: ".4rem", alignItems: "center" }}>

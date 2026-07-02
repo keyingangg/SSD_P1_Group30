@@ -27,6 +27,7 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "insecure-dev-key-change-me")
 # Applications
 # --------------------------------------------------------------------------
 INSTALLED_APPS = [
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -58,7 +59,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "core.middleware.RBACMiddleware",
-    # core.middleware.SecurityHeadersMiddleware,  # TODO: enable custom security headers
+    "core.middleware.SecurityHeadersMiddleware",
     # django-axes must be the last authentication-related middleware.
     "axes.middleware.AxesMiddleware",
 ]
@@ -132,6 +133,14 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL")
 # (see core/sql/storage_rls_policies.sql).
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY")
 SUPABASE_STORAGE_BUCKET = os.environ.get("SUPABASE_STORAGE_BUCKET", "auction-images")
+
+# --------------------------------------------------------------------------
+# ClamAV malware scanning (NFSR-C-07) — requires a clamd daemon reachable at
+# CLAMD_HOST:CLAMD_PORT. Uploads are rejected if the daemon is unreachable
+# (fail closed) rather than silently skipping the scan.
+# --------------------------------------------------------------------------
+CLAMD_HOST = os.environ.get("CLAMD_HOST", "localhost")
+CLAMD_PORT = int(os.environ.get("CLAMD_PORT", "3310"))
 
 # --------------------------------------------------------------------------
 # Database (Supabase PostgreSQL over TLS)
@@ -254,6 +263,34 @@ EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "True") == "True"
 DEFAULT_FROM_EMAIL = os.environ.get(
     "DEFAULT_FROM_EMAIL", "no-reply@securebid.local"
+)
+
+# --------------------------------------------------------------------------
+# Security alerting (NFSR-AC-05 / NFSR-AC-06 / NFSR-IN-07 / FSR-AC-07)
+# --------------------------------------------------------------------------
+# Recipients for automated security alerts (failed-login bursts, bid-rate
+# anomalies, denied-authorisation bursts, audit log hash mismatches, clock
+# drift). Falls back to Django's ADMINS setting if left empty.
+SECURITY_ALERT_EMAILS = [
+    e.strip()
+    for e in os.environ.get("SECURITY_ALERT_EMAILS", "").split(",")
+    if e.strip()
+]
+# Optional Slack-compatible incoming webhook URL. Alerts are always logged
+# regardless of whether this is set.
+SECURITY_ALERT_WEBHOOK_URL = os.environ.get("SECURITY_ALERT_WEBHOOK_URL", "")
+
+# ≥5 denied authorisation attempts from the same account/IP within this
+# rolling window triggers a security alert (FSR-AC-07).
+AUTHZ_DENIAL_ALERT_THRESHOLD = int(os.environ.get("AUTHZ_DENIAL_ALERT_THRESHOLD", "5"))
+AUTHZ_DENIAL_ALERT_WINDOW_SECONDS = int(
+    os.environ.get("AUTHZ_DENIAL_ALERT_WINDOW_SECONDS", "300")
+)
+
+# Clock drift verification against NTP (NFSR-AC-06 / NFSR-IN-01).
+NTP_SERVER = os.environ.get("NTP_SERVER", "pool.ntp.org")
+CLOCK_DRIFT_ALERT_THRESHOLD_SECONDS = float(
+    os.environ.get("CLOCK_DRIFT_ALERT_THRESHOLD_SECONDS", "2.0")
 )
 
 # --------------------------------------------------------------------------

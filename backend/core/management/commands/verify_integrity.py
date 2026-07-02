@@ -16,8 +16,8 @@ from django.db import connection
 # (table, column) -> human-readable on_delete for the matrix printout.
 EXPECTED_FKS = {
     ("bids", "listing_id"): "CASCADE",
-    ("bids", "bidder_id"): "CASCADE",
-    ("orders", "winner_id"): "PROTECT",
+    ("bids", "bidder_id"): "SET_NULL",
+    ("orders", "winner_id"): "SET_NULL",
     ("orders", "winning_bid_id"): "PROTECT",
     ("orders", "listing_id"): "PROTECT",
 }

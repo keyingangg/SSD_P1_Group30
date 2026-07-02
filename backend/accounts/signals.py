@@ -1,8 +1,10 @@
 import logging
 
 from auditlog.models import LogEntry
+from core.alerts import send_security_alert
 from core.audit import log_action
 from axes.signals import user_locked_out
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.dispatch import receiver
 from django.utils import timezone
@@ -107,3 +109,24 @@ def handle_user_locked_out(sender, request, username=None, ip_address=None, **kw
         )
     except Exception:
         logger.exception("Failed to write structured audit log for lockout of %s", user.email)
+
+    # Notify the security team: axes fires this signal at AXES_FAILURE_LIMIT
+    # (5) consecutive failed attempts for this username/IP pair (NFSR-AC-05).
+    try:
+        send_security_alert(
+            subject=f"{settings.AXES_FAILURE_LIMIT} consecutive failed login attempts",
+            message=(
+                f"Account {user.email} was locked after "
+                f"{settings.AXES_FAILURE_LIMIT} consecutive failed login attempts."
+            ),
+            severity="high",
+            metadata={
+                "user_id": str(user.id),
+                "email": user.email,
+                "ip_address": ip,
+                "lockout_level": profile.lockout_level,
+                "locked_until": profile.locked_until.isoformat() if profile.locked_until else None,
+            },
+        )
+    except Exception:
+        logger.exception("Failed to send security alert for lockout of %s", user.email)

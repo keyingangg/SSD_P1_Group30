@@ -5,6 +5,8 @@ import logging
 import smtplib
 import time
 
+from django.db.models import Q
+
 import qrcode
 from axes.utils import reset
 from django.contrib.auth import authenticate
@@ -35,6 +37,7 @@ from .emails import (
     send_password_reset_email,
     send_verification_email,
 )
+from .anonymisation import anonymise_user_data
 from .password import is_password_breached
 
 from .models import (
@@ -303,6 +306,7 @@ class LoginView(APIView):
     """Authenticate a verified user and start a session."""
 
     permission_classes = [AllowAny]
+    http_method_names = ["post"]
 
     def post(self, request):
         start_time = time.perf_counter()
@@ -780,9 +784,17 @@ class DeleteAccountView(APIView):
     """
 
     permission_classes = [IsAuthenticated]
+    http_method_names = ["post"]
 
     def post(self, request):
         user = request.user
+
+        # Admin accounts must be deleted by another admin, not by themselves.
+        if user.is_staff or user.is_superuser:
+            return Response(
+                {"detail": "Admin accounts cannot be self-deleted. Contact another administrator."},
+                status=403,
+            )
 
         # Step 1: require current password re-entry (SFR-05a).
         current_password = request.data.get("current_password", "")
@@ -816,6 +828,16 @@ class DeleteAccountView(APIView):
                 )
                 return Response({"detail": "Invalid MFA code."}, status=400)
 
+        # Step 3: block deletion while an unpaid winning bid exists (SFR-05b) —
+        # otherwise the seller is left with no way to collect payment.
+        from payments.models import Order
+
+        if Order.objects.filter(winner_id=user.id, fulfillment_status="pending_payment").exists():
+            return Response(
+                {"detail": "You have an outstanding unpaid order. Please complete or cancel payment before deleting your account."},
+                status=400,
+            )
+
         email = user.email
         ip = get_client_ip(request)
         ua = request.META.get("HTTP_USER_AGENT", "")
@@ -837,8 +859,11 @@ class DeleteAccountView(APIView):
             endpoint_path=request.path,
             metadata={"email": email},
         )
-        user.delete()
-        logger.info("User %s deleted their own account", email)
+        # Soft-delete: anonymise PII in-place rather than hard-deleting.
+        # Preserves auction integrity (bids, orders) and audit trail continuity
+        # while satisfying PDPA right-to-erasure within 30 days (NFSR-C-08).
+        anonymise_user_data(user)
+        logger.info("User %s deleted and anonymised their account", email)
         return Response({"detail": "Your account has been deleted."}, status=200)
 
 
@@ -849,9 +874,37 @@ class AdminUserListView(APIView):
     staff_only = True
 
     def get(self, request):
-        qs = User.objects.all().order_by("-created_at")
+        qs = User.objects.filter(is_anonymised=False).order_by("-created_at")
         serializer = AdminUserListSerializer(qs, many=True)
         return Response(serializer.data)
+
+
+def _get_admin_target(request, user_id):
+    """Return (user, error_response) — one of the two will be None.
+
+    Guards shared by every admin action that operates on another user's
+    account: cannot act on your own account, a superuser account, or an
+    already-anonymised account.
+    """
+    if not request.user.is_staff:
+        return None, Response({"detail": "Admin access required."}, status=403)
+    try:
+        target = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        return None, Response({"detail": "User not found."}, status=404)
+    if target.pk == request.user.pk:
+        return None, Response(
+            {"detail": "You cannot perform this action on your own account."},
+            status=400,
+        )
+    if target.is_superuser:
+        return None, Response(
+            {"detail": "Superuser accounts cannot be modified here."},
+            status=403,
+        )
+    if target.is_anonymised:
+        return None, Response({"detail": "User not found."}, status=404)
+    return target, None
 
 
 class AdminUserDetailView(APIView):
@@ -864,30 +917,11 @@ class AdminUserDetailView(APIView):
 
     permission_classes = [IsAdminUser]
     staff_only = True
-
-    def _get_target(self, request, user_id):
-        """Return (user, error_response) — one of the two will be None."""
-        if not request.user.is_staff:
-            return None, Response({"detail": "Admin access required."}, status=403)
-        try:
-            target = User.objects.get(pk=user_id)
-        except User.DoesNotExist:
-            return None, Response({"detail": "User not found."}, status=404)
-        if target.pk == request.user.pk:
-            return None, Response(
-                {"detail": "You cannot perform this action on your own account."},
-                status=400,
-            )
-        if target.is_superuser:
-            return None, Response(
-                {"detail": "Superuser accounts cannot be modified here."},
-                status=403,
-            )
-        return target, None
+    http_method_names = ["patch", "delete"]
 
     def patch(self, request, user_id):
         """Toggle is_active (lock / unlock)."""
-        target, err = self._get_target(request, user_id)
+        target, err = _get_admin_target(request, user_id)
         if err:
             return err
 
@@ -914,7 +948,7 @@ class AdminUserDetailView(APIView):
 
     def delete(self, request, user_id):
         """Permanently delete a user account."""
-        target, err = self._get_target(request, user_id)
+        target, err = _get_admin_target(request, user_id)
         if err:
             return err
 
@@ -934,9 +968,43 @@ class AdminUserDetailView(APIView):
             endpoint_path=request.path,
             metadata={"target_email": email},
         )
-        target.delete()
-        logger.info("Admin %s deleted account %s", request.user.email, email)
+        # Soft-delete: anonymise PII in-place (NFSR-C-08 · SFR-05c).
+        invalidate_all_user_sessions(target)
+        anonymise_user_data(target)
+        logger.info("Admin %s deleted and anonymised account %s", request.user.email, email)
         return Response({"detail": "Account deleted."}, status=200)
+
+
+class AdminTerminateSessionsView(APIView):
+    """Kill a user's live session(s) without locking or deleting the account (FSR-C-07)."""
+
+    permission_classes = [IsAdminUser]
+    staff_only = True
+    http_method_names = ["post"]
+
+    def post(self, request, user_id):
+        target, err = _get_admin_target(request, user_id)
+        if err:
+            return err
+
+        invalidate_all_user_sessions(target)
+        ip = get_client_ip(request)
+        ua = request.META.get("HTTP_USER_AGENT", "")
+        log_action(
+            user=request.user,
+            action="admin_session_terminated",
+            resource_type="User",
+            resource_id=target.id,
+            ip_address=ip,
+            user_agent=ua,
+            device_fingerprint=_device_fingerprint(ip, ua),
+            role="staff" if request.user.is_staff else "user",
+            request_method=request.method,
+            endpoint_path=request.path,
+            metadata={"target_email": target.email},
+        )
+        logger.info("Admin %s terminated sessions for %s", request.user.email, target.email)
+        return Response({"detail": "Sessions terminated."}, status=200)
 
 
 # ---------------------------------------------------------------------------
@@ -1126,3 +1194,173 @@ class MFALoginVerifyView(APIView):
             pass
 
         return Response(UserProfileSerializer(user).data, status=200)
+
+
+# ---------------------------------------------------------------------------
+# Audit log
+# ---------------------------------------------------------------------------
+
+_ACTION_LABEL_MAP = {
+    "login_success": "Login successful",
+    "login_failed": "Login failed",
+    "logout": "Logged out",
+    "mfa_login_success": "MFA login successful",
+    "mfa_login_failed": "MFA login failed",
+    "mfa_enrolled": "MFA enrolled",
+    "mfa_disabled": "MFA disabled",
+    "bid_placed": "Bid placed",
+    "bid_rejected": "Bid rejected",
+    "admin_account_toggled": "Account locked/unlocked",
+    "admin_account_deleted": "Account deleted",
+    "admin_listing_status_changed": "Listing status changed",
+    "admin_listing_deleted": "Listing deleted",
+    "ORDER_PAID": "Payment received",
+    "ORDER_FULFILLMENT_UPDATED": "Fulfillment updated",
+    "ORDER_ACCESS_DENIED": "Order access denied",
+    "CHECKOUT_ACCESS_DENIED": "Checkout access denied",
+    "CHECKOUT_INITIATED": "Checkout initiated",
+    "PAYMENT_WINNER_MISMATCH": "Payment winner mismatch",
+    "PAYMENT_CONFIRM_MISMATCH": "Payment confirm mismatch",
+}
+
+_CATEGORY_FILTERS = {
+    "login_logout": lambda qs: qs.filter(
+        action__in=["login_success", "login_failed", "logout",
+                    "mfa_login_success", "mfa_login_failed",
+                    "mfa_enrolled", "mfa_disabled"]
+    ),
+    "bids": lambda qs: qs.filter(action__icontains="bid"),
+    "admin_actions": lambda qs: qs.filter(action__istartswith="admin_"),
+    "payments": lambda qs: qs.filter(
+        action__in=["ORDER_PAID", "ORDER_FULFILLMENT_UPDATED",
+                    "ORDER_ACCESS_DENIED", "CHECKOUT_ACCESS_DENIED",
+                    "CHECKOUT_INITIATED", "PAYMENT_WINNER_MISMATCH",
+                    "PAYMENT_CONFIRM_MISMATCH"]
+    ) | qs.filter(resource_type="Order"),
+    "errors": lambda qs: qs.exclude(exception_type=""),
+}
+
+# Categories a regular admin (non-superuser) may request.
+_REGULAR_ADMIN_CATEGORIES = {"all", "bids"}
+
+# For the "all" tab, regular admins only see auction + bid events.
+def _restrict_to_auction_and_bids(qs):
+    return qs.filter(
+        Q(action__icontains="bid") | Q(action__icontains="listing")
+    )
+
+
+def _severity(entry):
+    action = entry.action.lower()
+    if entry.exception_type or "denied" in action or "error" in action:
+        return "error"
+    if "failed" in action or "rejected" in action or "mismatch" in action:
+        return "warning"
+    if entry.role in ("staff", "superuser", "admin") or action.startswith("admin_"):
+        return "admin"
+    return "success"
+
+
+def _serialize_entry(entry):
+    user = entry.user
+    if user is not None:
+        try:
+            user_display = user.email
+            is_admin = user.is_staff or user.is_superuser
+        except Exception:
+            user_display = "—"
+            is_admin = False
+    else:
+        user_display = "System"
+        is_admin = False
+
+    action_label = _ACTION_LABEL_MAP.get(entry.action, entry.action.replace("_", " ").title())
+    device = entry.device_fingerprint[:12] if entry.device_fingerprint else "—"
+
+    ref = ""
+    if entry.resource_type:
+        ref = entry.resource_type
+        if entry.resource_id:
+            ref += f" {str(entry.resource_id)[:8]}"
+
+    return {
+        "timestamp": entry.timestamp.isoformat(),
+        "user_display": user_display,
+        "is_admin": is_admin,
+        "action_label": action_label,
+        "ip_address": entry.ip_address or "—",
+        "device": device,
+        "ref": ref or "—",
+        "severity": _severity(entry),
+    }
+
+
+class AdminAuditLogView(APIView):
+    """Return audit log entries for the admin panel (staff only).
+
+    Access tiers (NFSR-AC-04 / FSR-AC-06):
+    - Superuser: full trail, all categories including payments.
+    - Regular admin: auction and bid logs only; payment/login/error
+      categories are blocked with 403.
+    Every read is itself logged (NFSR-AC-04).
+    """
+
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        from core.models import AuditLog
+
+        is_superuser = request.user.is_superuser
+        category = request.query_params.get("category", "all")
+        ip = get_client_ip(request)
+        ua = request.META.get("HTTP_USER_AGENT", "")
+
+        # Enforce category-level access for regular admins.
+        if not is_superuser and category not in _REGULAR_ADMIN_CATEGORIES:
+            log_action(
+                user=request.user,
+                action="audit_log_access_denied",
+                resource_type="AuditLog",
+                ip_address=ip,
+                user_agent=ua,
+                device_fingerprint=_device_fingerprint(ip, ua),
+                role="staff",
+                request_method=request.method,
+                endpoint_path=request.path,
+                metadata={"category": category, "reason": "insufficient_role"},
+            )
+            return Response(
+                {"detail": "You do not have permission to view this category."},
+                status=403,
+            )
+
+        qs = AuditLog.objects.select_related("user").order_by("-timestamp")
+
+        # Regular admins: restrict "all" to auction + bid events.
+        if not is_superuser and category == "all":
+            qs = _restrict_to_auction_and_bids(qs)
+        else:
+            filter_fn = _CATEGORY_FILTERS.get(category)
+            if filter_fn:
+                qs = filter_fn(qs)
+
+        results = [_serialize_entry(e) for e in qs[:500]]
+
+        # Log this read access (NFSR-AC-04).
+        try:
+            log_action(
+                user=request.user,
+                action="audit_log_read",
+                resource_type="AuditLog",
+                ip_address=ip,
+                user_agent=ua,
+                device_fingerprint=_device_fingerprint(ip, ua),
+                role="superuser" if is_superuser else "staff",
+                request_method=request.method,
+                endpoint_path=request.path,
+                metadata={"category": category, "result_count": len(results)},
+            )
+        except Exception:
+            pass
+
+        return Response(results)

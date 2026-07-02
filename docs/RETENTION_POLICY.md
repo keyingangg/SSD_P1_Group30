@@ -67,8 +67,8 @@ same cadence (systemd timer / cron).
 | Relationship (FK)                | on_delete   | Rationale |
 |----------------------------------|-------------|-----------|
 | `Bid.listing → Listing`          | **CASCADE** | Bids are meaningless without their listing. |
-| `Bid.bidder → User`              | **CASCADE** | Bids belong to a user; removed with a hard user delete (normal deletion is anonymise-in-place). |
-| `Order.winner → User`            | **PROTECT** | A payment record must survive a hard user delete (5-yr retention). |
+| `Bid.bidder → User`              | **SET_NULL** | Bid history is preserved on account deletion; the row is kept with a null bidder. Normal deletion is anonymise-in-place, so this is the hard-delete safety net. |
+| `Order.winner → User`            | **SET_NULL** | A payment record must survive a hard user delete (5-yr retention); the row is kept with a null winner. Normal deletion is anonymise-in-place (row + winner_id retained, PII scrubbed). |
 | `Order.winning_bid → Bid`        | **PROTECT** | The winning bid is the basis of the charge; must not vanish. |
 | `Order.listing → Listing`        | **PROTECT** | A payment record must always resolve the auction it paid for. |
 | `Listing.created_by → User`      | **CASCADE** | A seller's listings are removed with a hard user delete. |

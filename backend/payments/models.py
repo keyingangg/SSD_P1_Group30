@@ -17,12 +17,12 @@ class Order(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    # PROTECT (not CASCADE): a hard user delete must never erase a payment
-    # record inside its 5-year retention window. Account deletion is handled by
-    # the PDPA anonymise-in-place job (row kept, PII scrubbed), so PROTECT does
-    # not break the normal deletion flow. Consistent with winning_bid PROTECT.
     winner = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="orders"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="orders",
     )
     winning_bid = models.OneToOneField(
         "auctions.Bid", on_delete=models.PROTECT, related_name="order"

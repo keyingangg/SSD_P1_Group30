@@ -159,6 +159,24 @@ class Listing(models.Model):
             except Exception:
                 pass  # Never block auction finalization due to a logging failure.
 
+            # Broadcast auction-end to listing viewers and catalogue
+            try:
+                from asgiref.sync import async_to_sync
+                from channels.layers import get_channel_layer
+                from auctions.consumers import CATALOGUE_GROUP
+                channel_layer = get_channel_layer()
+                if channel_layer:
+                    async_to_sync(channel_layer.group_send)(
+                        f"auction_{self.id}",
+                        {"type": "auction.closed", "data": {"event": "auction_ended", "status": "ended"}},
+                    )
+                    async_to_sync(channel_layer.group_send)(
+                        CATALOGUE_GROUP,
+                        {"type": "catalogue.update", "data": {"event": "catalogue_changed"}},
+                    )
+            except Exception:
+                pass
+
         if winning_bid:
             self.bids.exclude(pk=winning_bid.pk).update(is_winning=False)
             if not winning_bid.is_winning:
@@ -169,7 +187,6 @@ class Listing(models.Model):
             # the winning bid (OneToOne) so repeated finalize calls — this runs
             # on many GET requests — never create duplicate orders (FR-03).
             # Imported here to avoid a circular import (payments imports Bid).
-            from django.conf import settings
             from payments.models import Order
 
             Order.objects.get_or_create(
@@ -213,7 +230,11 @@ class Bid(models.Model):
         Listing, on_delete=models.CASCADE, related_name="bids"
     )
     bidder = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="bids"
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bids",
     )
     # Public-facing anonymised label, e.g. "Bidder #4729".
     anonymous_identifier = models.CharField(max_length=20)
@@ -224,6 +245,9 @@ class Bid(models.Model):
 
     class Meta:
         db_table = "bids"
+        indexes = [
+            models.Index(fields=["bidder", "submitted_at"], name="bid_bidder_submitted_idx"),
+        ]
 
     def __str__(self):
         return f"{self.anonymous_identifier} - {self.amount}"

@@ -33,6 +33,12 @@ jobs:
             deactivate
             cd ..
 
+            # Install/refresh the scheduled security jobs (hash verification,
+            # bid-rate anomaly detection, clock drift check, retention report).
+            sudo mkdir -p /var/log/securebid
+            sudo chown "$USER" /var/log/securebid
+            crontab backend/cron/securebid-cron
+
             # Frontend: install deps and build
             cd frontend
             npm ci

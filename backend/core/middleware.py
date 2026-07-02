@@ -1,25 +1,55 @@
 """Custom middleware for SecureBid."""
 
 import logging
+from urllib.parse import urlparse
 
+from django.conf import settings
 from django.http import Http404
 from django.utils.deprecation import MiddlewareMixin
 
 from .audit import log_action
+from .security_monitoring import record_authz_denial
 
 logger = logging.getLogger("securebid")
 
 
+def _supabase_origin():
+    """Return the scheme+host of SUPABASE_URL, or '' if unset (dev/test)."""
+    if not settings.SUPABASE_URL:
+        return ""
+    parsed = urlparse(settings.SUPABASE_URL)
+    return f"{parsed.scheme}://{parsed.netloc}" if parsed.netloc else ""
+
+
 class SecurityHeadersMiddleware:
-    """Attach hardening security headers to every response."""
+    """Attach hardening security headers to every response.
+
+    X-Content-Type-Options is already set by Django's own SecurityMiddleware
+    (SECURE_CONTENT_TYPE_NOSNIFF defaults to True) so it isn't duplicated here.
+    """
 
     def __init__(self, get_response):
         self.get_response = get_response
+        supabase_origin = _supabase_origin()
+        img_src = f"'self' data:{(' ' + supabase_origin) if supabase_origin else ''}"
+        self._csp = (
+            "default-src 'self'; "
+            f"img-src {img_src}; "
+            "connect-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self'; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self'"
+        )
 
     def __call__(self, request):
         response = self.get_response(request)
-        # TODO: add CSP, Referrer-Policy, Permissions-Policy, X-Content-Type-
-        # Options, and related security headers.
+        response.headers.setdefault("Content-Security-Policy", self._csp)
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        response.headers.setdefault(
+            "Permissions-Policy", "geolocation=(), microphone=(), camera=()"
+        )
         return response
 
 
@@ -75,6 +105,12 @@ class RBACMiddleware(MiddlewareMixin):
                     )
                 except Exception:
                     pass
+                record_authz_denial(
+                    user,
+                    request.META.get("REMOTE_ADDR"),
+                    view_name="admin_path",
+                    endpoint_path=path,
+                )
                 raise Http404("Not found.")
 
         view_class = getattr(view_func, "view_class", None)
@@ -101,6 +137,12 @@ class RBACMiddleware(MiddlewareMixin):
                     )
                 except Exception:
                     pass
+                record_authz_denial(
+                    user,
+                    request.META.get("REMOTE_ADDR"),
+                    view_name=view_class.__name__,
+                    endpoint_path=path,
+                )
                 raise Http404("Not found.")
 
         return None

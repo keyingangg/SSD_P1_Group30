@@ -33,7 +33,8 @@ def test_upload_image_stores_under_server_generated_uuid_name(mock_supabase_clie
     bucket = mock_supabase_client.storage.from_.return_value
     file_obj = io.BytesIO(PNG_BYTES)
 
-    object_key = storage.upload_image(file_obj, "../../etc/passwd.png")
+    with patch("core.storage.scan_for_malware"):
+        object_key = storage.upload_image(file_obj, "../../etc/passwd.png")
 
     name, ext = object_key.rsplit(".", 1)
     uuid.UUID(name)  # raises ValueError if not a valid UUID

@@ -56,6 +56,9 @@ class ListingSerializer(serializers.ModelSerializer):
         return obj.get_display_status()
 
     def get_bid_count(self, obj):
+        # Use the pre-annotated value from the list queryset to avoid N+1 queries
+        if hasattr(obj, "_bid_count"):
+            return obj._bid_count
         return obj.bids.count()
 
     def to_representation(self, instance):
@@ -121,6 +124,34 @@ class BidSubmitSerializer(serializers.Serializer):
         if value <= 0:
             raise serializers.ValidationError("Bid amount must be greater than zero.")
         return value
+
+
+_ORDERING_CHOICES = [
+    "starts_at", "-starts_at",
+    "current_highest_bid", "-current_highest_bid",
+    "ends_at", "-ends_at",
+]
+
+
+class ListingSearchQuerySerializer(serializers.Serializer):
+    """Validate listing search/filter query params (SFR-11d).
+
+    All fields optional; ordering is restricted to an explicit allowlist
+    rather than accepting a raw field name (NFSR-IN-03).
+    """
+
+    q = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    category = serializers.ChoiceField(choices=_VALID_CATEGORIES, required=False)
+    status = serializers.ChoiceField(
+        choices=[choice[0] for choice in Listing.STATUS_CHOICES], required=False
+    )
+    min_price = serializers.DecimalField(
+        max_digits=12, decimal_places=2, min_value=Decimal("0"), required=False
+    )
+    max_price = serializers.DecimalField(
+        max_digits=12, decimal_places=2, min_value=Decimal("0"), required=False
+    )
+    ordering = serializers.ChoiceField(choices=_ORDERING_CHOICES, required=False)
 
 
 class ListingCreateSerializer(serializers.Serializer):
