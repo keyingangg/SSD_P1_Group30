@@ -13,9 +13,8 @@ new way to break the request/command that detected it.
 """
 import json
 import logging
-import urllib.error
-import urllib.request
 
+import requests
 from django.conf import settings
 from django.core.mail import mail_admins, send_mail
 
@@ -58,13 +57,10 @@ def send_security_alert(subject: str, message: str, *, severity: str = "high", m
     webhook_url = settings.SECURITY_ALERT_WEBHOOK_URL
     if webhook_url:
         try:
-            payload = json.dumps({"text": f"*{full_subject}*\n{body}"}).encode("utf-8")
-            req = urllib.request.Request(
+            requests.post(
                 webhook_url,
-                data=payload,
-                headers={"Content-Type": "application/json"},
-                method="POST",
+                json={"text": f"*{full_subject}*\n{body}"},
+                timeout=5,
             )
-            urllib.request.urlopen(req, timeout=5)
-        except (urllib.error.URLError, ValueError):
+        except requests.RequestException:
             logger.exception("Failed to POST security alert %r to webhook", subject)
