@@ -13,7 +13,6 @@ const ADMIN_NAV = [
   { label: "Orders",       to: "/admin/orders" },
   { label: "Users",        to: "/admin/users" },
   { label: "Audit Log",    to: "/admin/audit-log" },
-  { label: "Settings",     to: "/admin/settings" },
 ];
 
 function initials(user) {

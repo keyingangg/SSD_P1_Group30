@@ -1,32 +1,22 @@
 import { Link, Navigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 import { BRAND } from "../config/brand.js";
+import { getListings } from "../api/auctions.js";
 
-const SGD = (n) => `S$${n.toLocaleString()}`;
+const SGD = (n) => `S$${Number(n).toLocaleString()}`;
 
-const HIGHLIGHTS = [
-  {
-    id: "1", lot: "042", house: "Rolex",
-    title: "Submariner Date Ref. 126610LN",
-    estimateLow: 15000, estimateHigh: 22000,
-    currentBid: 18500, bids: 14, timeLeft: "4h 22m",
-    img: "https://picsum.photos/seed/luxwatch1/800/600",
-  },
-  {
-    id: "2", lot: "043", house: "Hermès",
-    title: "Birkin 30 — Togo Gold",
-    estimateLow: 28000, estimateHigh: 40000,
-    currentBid: 34200, bids: 28, timeLeft: "1d 8h",
-    img: "https://picsum.photos/seed/luxbag1/600/450",
-  },
-  {
-    id: "3", lot: "044", house: "Patek Philippe",
-    title: "Calatrava Ref. 6119G",
-    estimateLow: 60000, estimateHigh: 85000,
-    currentBid: 72000, bids: 31, timeLeft: "5h 10m",
-    img: "https://picsum.photos/seed/luxwatch2/600/450",
-  },
-];
+function timeRemaining(isoString) {
+  if (!isoString) return null;
+  const diff = Math.floor((new Date(isoString).getTime() - Date.now()) / 1000);
+  if (diff <= 0) return null;
+  const d = Math.floor(diff / 86400);
+  const h = Math.floor((diff % 86400) / 3600);
+  const m = Math.floor((diff % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
 
 const STEPS = [
   { num: "01", title: "Create & Verify Account", desc: "Register free. Email verification and optional MFA protect your account from day one.", arrow: true },
@@ -48,6 +38,23 @@ const SEC_RIGHT = [
 
 export default function Landing() {
   const { user, loading } = useAuth();
+  const [listings, setListings] = useState([]);
+
+  useEffect(() => {
+    getListings().then((data) => {
+      // Prefer active listings first, then scheduled, then ended
+      const sorted = [...data].sort((a, b) => {
+        const order = { active: 0, scheduled: 1, ended: 2 };
+        return (order[a.status] ?? 3) - (order[b.status] ?? 3);
+      });
+      setListings(sorted);
+    }).catch(() => {});
+  }, []);
+
+  const featured = listings[0] ?? null;
+  const highlights = listings.slice(0, 3);
+  const totalLots = listings.length;
+
   if (loading) return null;
   if (user) return <Navigate to="/auctions" replace />;
 
@@ -82,7 +89,7 @@ export default function Landing() {
       <div className="lp-stats-outer">
       <div className="lp-stats-strip">
         <div className="lp-stat">
-          <div className="lp-stat-value">1,240+</div>
+          <div className="lp-stat-value">{totalLots > 0 ? `${totalLots}+` : "—"}</div>
           <div className="lp-stat-label">Active Lots</div>
         </div>
         <div className="lp-stat-div" />
@@ -128,40 +135,43 @@ export default function Landing() {
         <div className="lp-hero-vdiv" />
 
         <div className="lp-hero-right">
-          {/* Featured lot card */}
-          <div className="lp-fc">
-            <div className="lp-fc-img-wrap">
-              <img
-                src="https://picsum.photos/seed/luxfeatured/800/600"
-                alt="Featured lot"
-                className="lp-fc-img"
-              />
-              <span className="lp-lot-badge">LOT 001</span>
-              <span className="lp-live-tag">
-                <span className="lp-live-dot" />LIVE
-              </span>
-            </div>
-            <div className="lp-fc-info">
-              <p className="lp-fc-house">PATEK PHILIPPE</p>
-              <h3 className="lp-fc-title">Nautilus Ref. 5711/1A-011</h3>
-              <p className="lp-fc-ref">Ref 2023 · Unworn · Full Set</p>
-            </div>
-          </div>
-          {/* Bid panel — separate card below */}
-          <div className="lp-bid-panel">
-            <div className="lp-bid-col">
-              <p className="lp-bp-label">CURRENT BID</p>
-              <p className="lp-bp-amount">S$142,500</p>
-              <p className="lp-bp-sub">31 bids</p>
-            </div>
-            <div className="lp-bp-vdiv" />
-            <div className="lp-bid-col">
-              <p className="lp-bp-label">CLOSES IN</p>
-              <p className="lp-bp-time">2d 14h 32m</p>
-              <p className="lp-bp-sub">Bidding open</p>
-            </div>
-            <Link to="/register" className="lp-bp-btn">Register &amp; Bid on This Lot</Link>
-          </div>
+          {featured && (
+            <>
+              <div className="lp-fc">
+                <div className="lp-fc-img-wrap">
+                  {featured.image_url
+                    ? <img src={featured.image_url} alt={featured.title} className="lp-fc-img" />
+                    : <div className="lp-fc-img" style={{ background: "#e8e5df" }} />
+                  }
+                  <span className="lp-lot-badge">LOT 001</span>
+                  {featured.status === "active" && (
+                    <span className="lp-live-tag">
+                      <span className="lp-live-dot" />LIVE
+                    </span>
+                  )}
+                </div>
+                <div className="lp-fc-info">
+                  <p className="lp-fc-house">{(featured.category || "").toUpperCase()}</p>
+                  <h3 className="lp-fc-title">{featured.title}</h3>
+                  <p className="lp-fc-ref">{featured.description?.slice(0, 60) || ""}</p>
+                </div>
+              </div>
+              <div className="lp-bid-panel">
+                <div className="lp-bid-col">
+                  <p className="lp-bp-label">CURRENT BID</p>
+                  <p className="lp-bp-amount">{SGD(featured.current_highest_bid || featured.starting_price)}</p>
+                  <p className="lp-bp-sub">{featured.bid_count ?? 0} bids</p>
+                </div>
+                <div className="lp-bp-vdiv" />
+                <div className="lp-bid-col">
+                  <p className="lp-bp-label">CLOSES IN</p>
+                  <p className="lp-bp-time">{timeRemaining(featured.ends_at) ?? "—"}</p>
+                  <p className="lp-bp-sub">{featured.status === "active" ? "Bidding open" : featured.status}</p>
+                </div>
+                <Link to="/register" className="lp-bp-btn">Register &amp; Bid on This Lot</Link>
+              </div>
+            </>
+          )}
         </div>
       </section>
 
@@ -174,60 +184,71 @@ export default function Landing() {
               <p className="lp-eyebrow">LIVE AUCTIONS</p>
               <h2 className="lp-section-h2">Current Season Highlights</h2>
             </div>
-            <Link to="/register" className="lp-browse-link">Browse all 124 lots →</Link>
+            <Link to="/register" className="lp-browse-link">Browse all {totalLots} lots →</Link>
           </div>
           <div className="lp-hl-bot-rule" />
 
           <div className="lp-hl-grid">
             {/* Large card */}
-            <div className="lp-hlc-large">
-              <div className="lp-hl-img-wrap">
-                <img src={HIGHLIGHTS[0].img} alt={HIGHLIGHTS[0].title} className="lp-hl-img" />
-                <span className="lp-lot-badge">LOT {HIGHLIGHTS[0].lot}</span>
-              </div>
-              <div className="lp-hlc-body">
-                <p className="lp-hlc-house">{HIGHLIGHTS[0].house}</p>
-                <h3 className="lp-hlc-title">{HIGHLIGHTS[0].title}</h3>
-                <p className="lp-hlc-est">Estimate: {SGD(HIGHLIGHTS[0].estimateLow)} — {SGD(HIGHLIGHTS[0].estimateHigh)}</p>
-                <div className="lp-hlc-rule" />
-                <div className="lp-hlc-foot">
-                  <p className="lp-hlc-bid">{SGD(HIGHLIGHTS[0].currentBid)}</p>
-                  <p className="lp-hlc-time">{HIGHLIGHTS[0].timeLeft}</p>
-                  <p className="lp-hlc-bids">{HIGHLIGHTS[0].bids} bids</p>
+            {highlights[0] && (
+              <div className="lp-hlc-large">
+                <div className="lp-hl-img-wrap">
+                  {highlights[0].image_url
+                    ? <img src={highlights[0].image_url} alt={highlights[0].title} className="lp-hl-img" />
+                    : <div className="lp-hl-img" style={{ background: "#e8e5df" }} />
+                  }
+                  <span className="lp-lot-badge">LOT 001</span>
                 </div>
-                <Link to="/register" className="lp-hlc-btn">View Lot &amp; Bid</Link>
+                <div className="lp-hlc-body">
+                  <p className="lp-hlc-house">{highlights[0].category}</p>
+                  <h3 className="lp-hlc-title">{highlights[0].title}</h3>
+                  <p className="lp-hlc-est">Starting bid: {SGD(highlights[0].starting_price)}</p>
+                  <div className="lp-hlc-rule" />
+                  <div className="lp-hlc-foot">
+                    <p className="lp-hlc-bid">{SGD(highlights[0].current_highest_bid || highlights[0].starting_price)}</p>
+                    <p className="lp-hlc-time">{timeRemaining(highlights[0].ends_at) ?? "—"}</p>
+                    <p className="lp-hlc-bids">{highlights[0].bid_count ?? 0} bids</p>
+                  </div>
+                  <Link to="/register" className="lp-hlc-btn">View Lot &amp; Bid</Link>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Right stack — two horizontal cards */}
-            <div className="lp-hl-stack">
-              {HIGHLIGHTS.slice(1).map((item) => (
-                <div className="lp-hlc-small" key={item.id}>
-                  <div className="lp-hls-img-wrap">
-                    <img src={item.img} alt={item.title} className="lp-hls-img" />
-                    <span className="lp-lot-badge sm">LOT {item.lot}</span>
-                  </div>
-                  <div className="lp-hls-body">
-                    <p className="lp-hlc-house">{item.house}</p>
-                    <h3 className="lp-hlc-title">{item.title}</h3>
-                    <p className="lp-hlc-est">Estimate: {SGD(item.estimateLow)} — {SGD(item.estimateHigh)}</p>
-                    <div className="lp-hlc-rule" />
-                    <div className="lp-hls-foot">
-                      <div>
-                        <p className="lp-hlc-bid">{SGD(item.currentBid)}</p>
-                        <p className="lp-hls-bid-label">current bid</p>
-                      </div>
-                      <div>
-                        <p className="lp-hlc-time">{item.timeLeft}</p>
-                        <p className="lp-hls-bid-label">remaining</p>
-                      </div>
-                      <p className="lp-hlc-bids">{item.bids} bids</p>
+            {highlights.length > 1 && (
+              <div className="lp-hl-stack">
+                {highlights.slice(1).map((item, i) => (
+                  <div className="lp-hlc-small" key={item.id}>
+                    <div className="lp-hls-img-wrap">
+                      {item.image_url
+                        ? <img src={item.image_url} alt={item.title} className="lp-hls-img" />
+                        : <div className="lp-hls-img" style={{ background: "#e8e5df" }} />
+                      }
+                      <span className="lp-lot-badge sm">LOT {String(i + 2).padStart(3, "0")}</span>
                     </div>
-                    <Link to="/register" className="lp-hlc-btn">View Lot &amp; Place Bid</Link>
+                    <div className="lp-hls-vdiv" />
+                    <div className="lp-hls-body">
+                      <p className="lp-hlc-house">{item.category}</p>
+                      <h3 className="lp-hlc-title">{item.title}</h3>
+                      <p className="lp-hlc-est">Starting bid: {SGD(item.starting_price)}</p>
+                      <div className="lp-hlc-rule" />
+                      <div className="lp-hls-foot">
+                        <div>
+                          <p className="lp-hlc-bid">{SGD(item.current_highest_bid || item.starting_price)}</p>
+                          <p className="lp-hls-bid-label">current bid</p>
+                        </div>
+                        <div>
+                          <p className="lp-hlc-time">{timeRemaining(item.ends_at) ?? "—"}</p>
+                          <p className="lp-hls-bid-label">remaining</p>
+                        </div>
+                        <p className="lp-hlc-bids">{item.bid_count ?? 0} bids</p>
+                      </div>
+                      <Link to="/register" className="lp-hlc-btn">View Lot &amp; Place Bid</Link>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </section>
