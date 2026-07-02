@@ -169,6 +169,7 @@ class Listing(models.Model):
             # the winning bid (OneToOne) so repeated finalize calls — this runs
             # on many GET requests — never create duplicate orders (FR-03).
             # Imported here to avoid a circular import (payments imports Bid).
+            from django.conf import settings
             from payments.models import Order
 
             Order.objects.get_or_create(
@@ -177,6 +178,12 @@ class Listing(models.Model):
                     "winner_id": winner_id,
                     "delivery_address_snapshot": "",
                     "fulfillment_status": "pending_payment",
+                    # Persist the financial record fields up front so the Order
+                    # row independently proves what was charged (FSR-AC-10).
+                    # IP/session are unknown here (no request) — set at checkout.
+                    "amount": winning_bid.amount,
+                    "currency": settings.STRIPE_CURRENCY,
+                    "listing_id": self.id,
                 },
             )
 

@@ -97,7 +97,9 @@ class CreatePaymentIntentView(APIView):
             order.delivery_address_snapshot = delivery_address
             order.save(update_fields=["delivery_address_snapshot", "updated_at"])
 
-        amount_cents = _amount_to_cents(order.winning_bid.amount)
+        # Prefer the persisted amount (source of truth); fall back to the bid
+        # for any legacy row not yet backfilled.
+        amount_cents = _amount_to_cents(order.amount or order.winning_bid.amount)
 
         intent = stripe_client.create_payment_intent(
             amount_cents=amount_cents,
@@ -109,10 +111,17 @@ class CreatePaymentIntentView(APIView):
             },
         )
 
+        # Capture the request context onto the payment record for the audit
+        # trail (FSR-AC-10). session_key may be None under token auth — store "".
+        order.ip_address = request.META.get("REMOTE_ADDR", "") or None
+        order.session_id = request.session.session_key or ""
+
         # Record the PaymentIntent id so the webhook can reconcile it later.
+        update_fields = ["ip_address", "session_id", "updated_at"]
         if intent.get("id"):
             order.stripe_payment_intent_id = intent["id"]
-            order.save(update_fields=["stripe_payment_intent_id", "updated_at"])
+            update_fields.append("stripe_payment_intent_id")
+        order.save(update_fields=update_fields)
 
         log_action(
             user=request.user,
@@ -274,8 +283,8 @@ class AdminOrderListView(APIView):
                     "id": str(order.id),
                     "order_ref": f"SB-{str(order.id).upper()[:8]}",
                     "fulfillment_status": order.fulfillment_status,
-                    "amount": _amount_to_cents(order.winning_bid.amount),
-                    "currency": settings.STRIPE_CURRENCY,
+                    "amount": _amount_to_cents(order.amount or order.winning_bid.amount),
+                    "currency": order.currency or settings.STRIPE_CURRENCY,
                     "listing_title": listing.title,
                     "listing_image_url": image_url,
                     "winner_display": _mask_winner(winner),
@@ -336,8 +345,8 @@ class OrderDetailView(APIView):
                 "order_ref": f"SB-{str(order.id).upper()[:8]}",
                 "fulfillment_status": order.fulfillment_status,
                 "delivery_address_snapshot": order.delivery_address_snapshot,
-                "amount": _amount_to_cents(order.winning_bid.amount),
-                "currency": settings.STRIPE_CURRENCY,
+                "amount": _amount_to_cents(order.amount or order.winning_bid.amount),
+                "currency": order.currency or settings.STRIPE_CURRENCY,
                 "listing_title": listing.title,
                 "listing_image_url": image_url,
                 "won_at": won_at,

@@ -269,6 +269,17 @@ STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 STRIPE_CURRENCY = os.environ.get("STRIPE_CURRENCY", "sgd")
 
 # --------------------------------------------------------------------------
+# Audit / payment log retention (NFSR-AC-07 · FSR-AC-09 · NFR-06)
+# --------------------------------------------------------------------------
+# Minimum retention floors. General audit logs are kept >= 3 years (Singapore
+# Companies Act s.199); payment logs >= 5 years (MAS guidelines). The floor is
+# enforced structurally by the append-only trigger + REVOKE on audit_logs;
+# there is no auto-purge (purging would weaken tamper-evidence). See
+# docs/RETENTION_POLICY.md and the verify_retention management command.
+AUDIT_LOG_RETENTION_YEARS = 3
+PAYMENT_LOG_RETENTION_YEARS = 5
+
+# --------------------------------------------------------------------------
 # Internationalization
 # --------------------------------------------------------------------------
 LANGUAGE_CODE = "en-us"

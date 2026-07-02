@@ -17,12 +17,33 @@ class Order(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # PROTECT (not CASCADE): a hard user delete must never erase a payment
+    # record inside its 5-year retention window. Account deletion is handled by
+    # the PDPA anonymise-in-place job (row kept, PII scrubbed), so PROTECT does
+    # not break the normal deletion flow. Consistent with winning_bid PROTECT.
     winner = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="orders"
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="orders"
     )
     winning_bid = models.OneToOneField(
         "auctions.Bid", on_delete=models.PROTECT, related_name="order"
     )
+    # Direct auction reference (auction ID, NFSR-AC-07 · FSR-AC-10). PROTECT so
+    # a payment record always resolves the listing it was charged for.
+    listing = models.ForeignKey(
+        "auctions.Listing",
+        on_delete=models.PROTECT,
+        related_name="orders",
+        null=True,
+    )
+    # Self-contained financial record: amount/currency are persisted at Order
+    # creation rather than recomputed, so the row independently proves what was
+    # charged (NFSR-AC-07 · FSR-AC-10).
+    amount = models.DecimalField(max_digits=12, decimal_places=2, null=True)
+    currency = models.CharField(max_length=10, null=True)
+    # Captured at checkout for the payment audit trail (nullable: unknown at
+    # Order creation; session_key may be absent under token auth).
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    session_id = models.CharField(max_length=40, blank=True, null=True)
     stripe_payment_intent_id = models.CharField(
         max_length=255, blank=True, null=True
     )
