@@ -275,7 +275,7 @@ STRIPE_CURRENCY = os.environ.get("STRIPE_CURRENCY", "sgd")
 # Companies Act s.199); payment logs >= 5 years (MAS guidelines). The floor is
 # enforced structurally by the append-only trigger + REVOKE on audit_logs;
 # there is no auto-purge (purging would weaken tamper-evidence). See
-# docs/RETENTION_POLICY.md and the verify_retention management command.
+# docs/RETENTION_POLICY.md and the verify_retention_policy management command.
 AUDIT_LOG_RETENTION_YEARS = 3
 PAYMENT_LOG_RETENTION_YEARS = 5
 

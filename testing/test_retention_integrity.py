@@ -27,19 +27,9 @@ def test_raw_delete_on_audit_logs_is_blocked():
     assert AuditLog.objects.filter(pk=row.pk).exists()
 
 
-@pytest.mark.django_db
-def test_verify_retention_passes_on_clean_db():
-    """verify_retention exits 0 and reports counts when the floor is intact."""
-    log_action(user=None, action="ORDER_PAID", resource_type="Order")
-    log_action(user=None, action="TEST_GENERAL", resource_type="Test")
-
-    out = StringIO()
-    call_command("verify_retention", stdout=out)
-    output = out.getvalue()
-
-    assert "PASSED" in output
-    assert "payment logs" in output
-    assert "general logs" in output
+# Note: retention-command reporting is covered by main's verify_retention_policy
+# and its own tests. The append-only floor it relies on is verified directly by
+# test_raw_delete_on_audit_logs_is_blocked above.
 
 
 @pytest.mark.django_db

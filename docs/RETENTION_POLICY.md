@@ -54,10 +54,9 @@ survive user-account removal.
 
 Two management commands assert the guarantees (read-only; they never delete):
 
-- `python manage.py verify_retention` — confirms the append-only trigger exists,
-  a `DELETE` on `audit_logs` is blocked (attempted in a rolled-back
-  transaction), and reports counts + oldest/newest timestamps for general and
-  payment logs. Exits non-zero on failure.
+- `python manage.py verify_retention_policy` — reports audit/payment log counts
+  and the age of the oldest rows against the retention floor, and confirms the
+  append-only invariant (no update/delete path). Read-only.
 - `python manage.py verify_integrity` — see the FK matrix below.
 
 These pair with Sim Jun An's scheduled SHA-256 hash-verify job and can run on the
