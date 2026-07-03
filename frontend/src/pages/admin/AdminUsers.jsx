@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import AdminLayout from "../../components/admin/AdminLayout.jsx";
-import { deleteAdminUser, getAdminUsers, sendStaffInvite, toggleUserLock } from "../../api/auth.js";
+import { deleteAdminUser, demoteStaff, getAdminUsers, promoteUser, sendStaffInvite, terminateSessions, toggleUserLock } from "../../api/auth.js";
 import { useAuth } from "../../context/AuthContext.jsx";
 
 const ROLE_OPTIONS   = ["All", "Superuser", "Staff", "Bidder"];
@@ -84,6 +84,9 @@ function ActionBtn({ onClick, disabled, children, danger }) {
 
 export default function AdminUsers() {
   const { user: currentUser } = useAuth();
+  // Role management (invite / promote / demote) is restricted to superusers,
+  // matching the server-side IsSuperUser permission on those endpoints.
+  const isSuperuser = currentUser?.is_superuser;
 
   // ── Invite form ────────────────────────────────────────────────────────────
   const [inviteEmail, setInviteEmail] = useState("");
@@ -162,6 +165,57 @@ export default function AdminUsers() {
     }
   };
 
+  // ── Demote handler ─────────────────────────────────────────────────────────
+  const handleDemote = async (userId) => {
+    if (!window.confirm(
+      "Demote this staff member to a regular user? This removes their admin access and ends their active sessions immediately."
+    )) return;
+    setRowAction((prev) => ({ ...prev, [userId]: "demoting" }));
+    try {
+      await demoteStaff(userId);
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, role: "Bidder" } : u))
+      );
+    } catch (err) {
+      alert(err?.response?.data?.detail || "Demote failed. Please try again.");
+    } finally {
+      setRowAction((prev) => { const next = { ...prev }; delete next[userId]; return next; });
+    }
+  };
+
+  // ── Promote handler ────────────────────────────────────────────────────────
+  const handlePromote = async (userId) => {
+    if (!window.confirm(
+      "Promote this user to a staff member? They will gain admin access and be signed out to refresh their session."
+    )) return;
+    setRowAction((prev) => ({ ...prev, [userId]: "promoting" }));
+    try {
+      await promoteUser(userId);
+      setUsers((prev) =>
+        prev.map((u) => (u.id === userId ? { ...u, role: "Staff" } : u))
+      );
+    } catch (err) {
+      alert(err?.response?.data?.detail || "Promote failed. Please try again.");
+    } finally {
+      setRowAction((prev) => { const next = { ...prev }; delete next[userId]; return next; });
+    }
+  };
+
+  // ── Terminate sessions handler ─────────────────────────────────────────────
+  const handleTerminate = async (userId) => {
+    if (!window.confirm(
+      "End all active sessions for this user? They will be signed out immediately and must log in again."
+    )) return;
+    setRowAction((prev) => ({ ...prev, [userId]: "terminating" }));
+    try {
+      await terminateSessions(userId);
+    } catch (err) {
+      alert(err?.response?.data?.detail || "Failed to end sessions. Please try again.");
+    } finally {
+      setRowAction((prev) => { const next = { ...prev }; delete next[userId]; return next; });
+    }
+  };
+
   // ── Delete handler ─────────────────────────────────────────────────────────
   const handleDelete = async (userId) => {
     setRowAction((prev) => ({ ...prev, [userId]: "deleting" }));
@@ -194,7 +248,8 @@ export default function AdminUsers() {
       <p className="admin-eyebrow">SecureBid Admin Panel</p>
       <h1 className="admin-page-title">Users</h1>
 
-      {/* Invite staff */}
+      {/* Invite staff — superuser only */}
+      {isSuperuser && (
       <div className="admin-panel" style={{ marginBottom: "1.5rem" }}>
         <div className="admin-panel-header">
           <span className="admin-panel-title">Invite Staff Member</span>
@@ -227,6 +282,7 @@ export default function AdminUsers() {
           )}
         </form>
       </div>
+      )}
 
       {/* User list */}
       <div className="admin-panel">
@@ -330,6 +386,28 @@ export default function AdminUsers() {
                             disabled={!!busy}
                           >
                             {busy === "locking" ? "…" : isLocked ? "Unlock" : "Lock"}
+                          </ActionBtn>
+                          {isSuperuser && u.role === "Staff" && (
+                            <ActionBtn
+                              onClick={() => handleDemote(u.id)}
+                              disabled={!!busy}
+                            >
+                              {busy === "demoting" ? "…" : "Demote"}
+                            </ActionBtn>
+                          )}
+                          {isSuperuser && u.role === "Bidder" && (
+                            <ActionBtn
+                              onClick={() => handlePromote(u.id)}
+                              disabled={!!busy}
+                            >
+                              {busy === "promoting" ? "…" : "Promote"}
+                            </ActionBtn>
+                          )}
+                          <ActionBtn
+                            onClick={() => handleTerminate(u.id)}
+                            disabled={!!busy}
+                          >
+                            {busy === "terminating" ? "…" : "End Sessions"}
                           </ActionBtn>
                           <ActionBtn
                             danger

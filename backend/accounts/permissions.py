@@ -57,3 +57,32 @@ class IsAdminUser(BasePermission):
             raise NotFound("Not found.")
 
         return True
+
+
+class IsSuperUser(BasePermission):
+    """Allow access only to superuser accounts (server-side is_superuser).
+
+    Reserved for the most privileged operations — notably role management
+    (granting/revoking staff) — so that the ability to change privileges is
+    itself restricted to the top tier, not delegated to every staff member
+    (least privilege). Returns 404 (not 403) so the endpoint's existence is not
+    disclosed to lower-privileged users.
+    """
+
+    def has_permission(self, request, view):
+        user = getattr(request, "user", None)
+
+        if not user or not user.is_authenticated:
+            raise NotFound("Not found.")
+
+        if not getattr(user, "is_superuser", False):
+            logger.warning(
+                "Superuser access denied for user=%s ip=%s agent=%s path=%s",
+                getattr(user, "email", None),
+                request.META.get("REMOTE_ADDR"),
+                request.META.get("HTTP_USER_AGENT", ""),
+                request.path,
+            )
+            raise NotFound("Not found.")
+
+        return True

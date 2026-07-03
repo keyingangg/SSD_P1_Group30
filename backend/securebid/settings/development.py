@@ -22,3 +22,8 @@ CSRF_COOKIE_SECURE = False
 # the `backend/` directory rather than the repository root.
 MEDIA_ROOT = BASE_DIR / "backend" / "images"
 MEDIA_URL = "/images/"
+
+# Skip the malware scan when no local ClamAV daemon is running, rather than
+# blocking every image upload in local dev (NFSR-C-07 stays fully enforced in
+# production — see production.py, which never sets this to True).
+CLAMD_DEV_BYPASS = True
