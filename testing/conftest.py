@@ -49,6 +49,15 @@ def admin_user(db):
 
 
 @pytest.fixture
+def superuser(db):
+    return User.objects.create_superuser(
+        email="root@example.com",
+        display_name="Root Admin",
+        password="RootPass123!",
+    )
+
+
+@pytest.fixture
 def auth_client(client, verified_user):
     client.force_login(verified_user)
     return client
@@ -57,4 +66,10 @@ def auth_client(client, verified_user):
 @pytest.fixture
 def admin_client(client, admin_user):
     client.force_login(admin_user)
+    return client
+
+
+@pytest.fixture
+def superuser_client(client, superuser):
+    client.force_login(superuser)
     return client

@@ -59,13 +59,18 @@ def scan_for_malware(file_obj):
 
     Fails closed: if the ClamAV daemon can't be reached at all (down,
     misconfigured, network issue), the upload is rejected rather than let
-    through unscanned.
+    through unscanned. Production never bypasses this (CLAMD_DEV_BYPASS is
+    False in production.py and test.py) — only development.py sets it to
+    True, so `manage.py runserver` doesn't require every developer to run a
+    local ClamAV daemon just to test image uploads.
     """
     file_obj.seek(0)
     try:
         client = clamd.ClamdNetworkSocket(host=settings.CLAMD_HOST, port=settings.CLAMD_PORT)
         result = client.instream(file_obj)
     except Exception:
+        if getattr(settings, "CLAMD_DEV_BYPASS", False):
+            return
         raise ValidationError("File could not be scanned for malware. Please try again later.")
     finally:
         file_obj.seek(0)

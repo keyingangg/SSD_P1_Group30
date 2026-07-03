@@ -232,10 +232,19 @@ def test_password_reset_confirm_expired_token_returns_400(verified_user, client)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.django_db
-def test_staff_invite_admin_returns_201(admin_client):
-    resp = admin_client.post(STAFF_INVITE_URL, {"email": "newstaff@example.com"}, format="json")
+def test_staff_invite_superuser_returns_201(superuser_client):
+    resp = superuser_client.post(STAFF_INVITE_URL, {"email": "newstaff@example.com"}, format="json")
     assert resp.status_code == 201
     assert len(mail.outbox) == 1
+
+
+@pytest.mark.django_db
+def test_staff_invite_plain_staff_returns_404(admin_client):
+    """Staff invite is superuser-only — a plain staff account is rejected,
+    even though it passes the general staff_only/IsAdminUser gate elsewhere."""
+    resp = admin_client.post(STAFF_INVITE_URL, {"email": "newstaff@example.com"}, format="json")
+    assert resp.status_code == 404
+    assert len(mail.outbox) == 0
 
 
 @pytest.mark.django_db
@@ -251,8 +260,8 @@ def test_staff_invite_unauthenticated_returns_404(client):
 
 
 @pytest.mark.django_db
-def test_staff_invite_duplicate_email_returns_400(admin_client, verified_user):
-    resp = admin_client.post(STAFF_INVITE_URL, {"email": verified_user.email}, format="json")
+def test_staff_invite_duplicate_email_returns_400(superuser_client, verified_user):
+    resp = superuser_client.post(STAFF_INVITE_URL, {"email": verified_user.email}, format="json")
     assert resp.status_code == 400
 
 

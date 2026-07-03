@@ -26,7 +26,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.permissions import IsAdminUser, IsEmailVerified
+from accounts.permissions import IsAdminUser, IsEmailVerified, IsSuperUser
 from core.audit import log_action, device_fingerprint as _device_fingerprint
 
 logger = logging.getLogger("securebid")
@@ -648,9 +648,12 @@ class StaffInviteView(APIView):
     Creates an inactive staff account with an unusable password so the
     inviting admin never handles a credential. The invitee sets their own
     password when they accept the link.
+
+    Restricted to superusers: granting staff privileges is a top-tier operation
+    reserved for the owner account, not delegated to every staff member.
     """
 
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsSuperUser]
     staff_only = True
 
     def post(self, request):
@@ -1005,6 +1008,140 @@ class AdminTerminateSessionsView(APIView):
         )
         logger.info("Admin %s terminated sessions for %s", request.user.email, target.email)
         return Response({"detail": "Sessions terminated."}, status=200)
+
+
+class AdminDemoteStaffView(APIView):
+    """Demote an existing staff member back to a regular user (staff only).
+
+    The counterpart to StaffInviteView (promotion). Removes the is_staff
+    privilege from an existing account, immediately terminates the target's live
+    sessions so the privilege drop takes effect at once, and records the change
+    in django-auditlog (admin_role_demoted, NFSR-AC-02). Guards mirror every
+    other admin action via _get_admin_target: an admin cannot demote their own
+    account, a superuser, or an anonymised account.
+
+    Restricted to superusers: revoking staff privileges is a top-tier operation
+    reserved for the owner account (least privilege).
+    """
+
+    permission_classes = [IsSuperUser]
+    staff_only = True
+    http_method_names = ["post"]
+
+    def post(self, request, user_id):
+        target, err = _get_admin_target(request, user_id)
+        if err:
+            return err
+
+        # Only an actual staff member can be demoted — a regular bidder has no
+        # elevated role to remove.
+        if not target.is_staff:
+            return Response(
+                {"detail": "This account is not a staff member."},
+                status=400,
+            )
+
+        target.is_staff = False
+        target.save(update_fields=["is_staff"])
+
+        # Drop the elevated privilege immediately by killing any live session,
+        # forcing the (now regular) user to re-authenticate.
+        invalidate_all_user_sessions(target)
+
+        ip = get_client_ip(request)
+        ua = request.META.get("HTTP_USER_AGENT", "")
+        log_action(
+            user=request.user,
+            action="admin_role_demoted",
+            resource_type="User",
+            resource_id=target.id,
+            ip_address=ip,
+            user_agent=ua,
+            device_fingerprint=_device_fingerprint(ip, ua),
+            role="staff" if request.user.is_staff else "user",
+            request_method=request.method,
+            endpoint_path=request.path,
+            metadata={
+                "target_email": target.email,
+                "old_role": "staff",
+                "new_role": "user",
+            },
+        )
+        logger.info(
+            "Admin %s demoted staff account %s to regular user",
+            request.user.email,
+            target.email,
+        )
+        return Response(
+            {"detail": "Staff member demoted to regular user.", "role": "Bidder"},
+            status=200,
+        )
+
+
+class AdminPromoteUserView(APIView):
+    """Promote an existing regular user to staff (staff only).
+
+    The re-promotion counterpart to AdminDemoteStaffView, for restoring staff
+    access to an account that already exists (e.g. one that was accidentally
+    demoted). Unlike StaffInviteView — which creates a brand-new invited account
+    and can only target an unused email — this elevates an existing, already
+    registered user. Audit-logged as admin_role_promoted (NFSR-AC-02). Guards
+    mirror every other admin action via _get_admin_target: an admin cannot
+    promote their own account, a superuser, or an anonymised account.
+
+    Restricted to superusers: granting staff privileges is a top-tier operation
+    reserved for the owner account (least privilege).
+    """
+
+    permission_classes = [IsSuperUser]
+    staff_only = True
+    http_method_names = ["post"]
+
+    def post(self, request, user_id):
+        target, err = _get_admin_target(request, user_id)
+        if err:
+            return err
+
+        if target.is_staff:
+            return Response(
+                {"detail": "This account is already a staff member."},
+                status=400,
+            )
+
+        target.is_staff = True
+        target.save(update_fields=["is_staff"])
+
+        # Force a fresh login so the newly elevated role is reflected in the
+        # target's session and admin UI on their next sign-in.
+        invalidate_all_user_sessions(target)
+
+        ip = get_client_ip(request)
+        ua = request.META.get("HTTP_USER_AGENT", "")
+        log_action(
+            user=request.user,
+            action="admin_role_promoted",
+            resource_type="User",
+            resource_id=target.id,
+            ip_address=ip,
+            user_agent=ua,
+            device_fingerprint=_device_fingerprint(ip, ua),
+            role="staff" if request.user.is_staff else "user",
+            request_method=request.method,
+            endpoint_path=request.path,
+            metadata={
+                "target_email": target.email,
+                "old_role": "user",
+                "new_role": "staff",
+                "method": "direct",
+            },
+        )
+        logger.info(
+            "Admin %s promoted user %s to staff", request.user.email, target.email
+        )
+        return Response(
+            {"detail": "User promoted to staff member.", "role": "Staff"},
+            status=200,
+        )
 
 
 # ---------------------------------------------------------------------------
