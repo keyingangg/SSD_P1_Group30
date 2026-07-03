@@ -83,6 +83,21 @@ export async function deleteAdminUser(userId) {
   return data;
 }
 
+export async function demoteStaff(userId) {
+  const { data } = await axiosClient.post(`/accounts/admin/users/${userId}/demote/`);
+  return data;
+}
+
+export async function promoteUser(userId) {
+  const { data } = await axiosClient.post(`/accounts/admin/users/${userId}/promote/`);
+  return data;
+}
+
+export async function terminateSessions(userId) {
+  const { data } = await axiosClient.post(`/accounts/admin/users/${userId}/terminate-sessions/`);
+  return data;
+}
+
 export async function getMFAStatus() {
   const { data } = await axiosClient.get("/accounts/mfa/status/");
   return data;

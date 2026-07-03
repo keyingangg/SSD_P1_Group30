@@ -138,9 +138,16 @@ SUPABASE_STORAGE_BUCKET = os.environ.get("SUPABASE_STORAGE_BUCKET", "auction-ima
 # ClamAV malware scanning (NFSR-C-07) — requires a clamd daemon reachable at
 # CLAMD_HOST:CLAMD_PORT. Uploads are rejected if the daemon is unreachable
 # (fail closed) rather than silently skipping the scan.
+#
+# CLAMD_DEV_BYPASS is False here and in test.py/production.py — it is
+# overridden to True only in development.py, so `manage.py runserver`
+# doesn't require every developer to run a local ClamAV daemon just to test
+# image uploads, while the test suite still exercises the real fail-closed
+# behaviour and production never bypasses the scan under any setting.
 # --------------------------------------------------------------------------
 CLAMD_HOST = os.environ.get("CLAMD_HOST", "localhost")
 CLAMD_PORT = int(os.environ.get("CLAMD_PORT", "3310"))
+CLAMD_DEV_BYPASS = False
 
 # --------------------------------------------------------------------------
 # Database (Supabase PostgreSQL over TLS)
