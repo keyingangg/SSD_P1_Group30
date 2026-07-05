@@ -136,7 +136,7 @@ class ListingListView(APIView):
         ).update(status="active")
         queryset = Listing.objects.annotate(_bid_count=Count("bids"))
         if not request.user.is_staff:
-            queryset = queryset.exclude(status__in=["draft", "cancelled"])
+            queryset = queryset.exclude(status__in=["draft", "cancelled", "scheduled"])
 
         if params.get("q"):
             queryset = queryset.filter(title__icontains=params["q"])
@@ -174,7 +174,7 @@ class ListingDetailView(APIView):
         except Listing.DoesNotExist:
             return Response({"detail": "Listing not found."}, status=404)
 
-        if not request.user.is_staff and listing.status in {"draft", "cancelled"}:
+        if not request.user.is_staff and listing.status in {"draft", "cancelled", "scheduled"}:
             log_action(
                 user=request.user if getattr(request.user, "is_authenticated", False) else None,
                 action="listing_access_denied",
@@ -657,7 +657,7 @@ class ListingBidsView(BidImmutableMixin, APIView):
         except Listing.DoesNotExist:
             return Response({"detail": "Listing not found."}, status=404)
 
-        if not request.user.is_staff and listing.status in {"draft", "cancelled"}:
+        if not request.user.is_staff and listing.status in {"draft", "cancelled", "scheduled"}:
             return Response({"detail": "Listing not found."}, status=404)
 
         bids = (
