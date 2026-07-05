@@ -41,6 +41,10 @@ jobs:
 
             # Frontend: install deps and build
             cd frontend
+            # EC2's system npm hard-errors on optional, platform-mismatched
+            # packages (EBADPLATFORM, e.g. esbuild's per-OS binaries) instead
+            # of skipping them as it should. Upgrading npm first avoids it.
+            sudo npm install -g npm@latest
             npm ci
             npm run build
             cd ..
