@@ -82,9 +82,31 @@ def test_auction_list_search_rejects_invalid_ordering(client):
 
 
 @pytest.mark.django_db
-def test_users_can_view_ended_auction_details(client, admin_user):
+def test_listing_detail_requires_auth(client, admin_user):
     now = timezone.now()
-    
+
+    listing = Listing.objects.create(
+        created_by=admin_user,
+        title="Live Auction",
+        description="desc",
+        image_key="",
+        category="Others",
+        starting_price="100.00",
+        current_highest_bid="100.00",
+        minimum_increment="5.00",
+        starts_at=now - timedelta(hours=1),
+        ends_at=now + timedelta(hours=1),
+        status="active",
+    )
+
+    resp = client.get(f"/api/auctions/{listing.id}/")
+    assert resp.status_code == 403
+
+
+@pytest.mark.django_db
+def test_users_can_view_ended_auction_details(auth_client, admin_user):
+    now = timezone.now()
+
     ended_listing = Listing.objects.create(
         created_by=admin_user,
         title="Ended Auction Details",
@@ -98,8 +120,8 @@ def test_users_can_view_ended_auction_details(client, admin_user):
         ends_at=now - timedelta(hours=1),
         status="ended",
     )
-    
-    resp = client.get(f"/api/auctions/{ended_listing.id}/")
+
+    resp = auth_client.get(f"/api/auctions/{ended_listing.id}/")
     assert resp.status_code == 200
     
     data = resp.json()
@@ -133,7 +155,7 @@ def test_scheduled_listing_hidden_from_list_for_non_staff(client, admin_user):
 
 
 @pytest.mark.django_db
-def test_scheduled_listing_detail_returns_404_for_non_staff(client, admin_user):
+def test_scheduled_listing_detail_returns_404_for_non_staff(auth_client, admin_user):
     now = timezone.now()
 
     scheduled_listing = Listing.objects.create(
@@ -150,7 +172,7 @@ def test_scheduled_listing_detail_returns_404_for_non_staff(client, admin_user):
         status="scheduled",
     )
 
-    resp = client.get(f"/api/auctions/{scheduled_listing.id}/")
+    resp = auth_client.get(f"/api/auctions/{scheduled_listing.id}/")
     assert resp.status_code == 404
 
 

@@ -159,9 +159,15 @@ class ListingListView(APIView):
     name="get",
 )
 class ListingDetailView(APIView):
-    """View a single published listing's details (public)."""
+    """View a single published listing's details.
 
-    permission_classes = [AllowAny]
+    Requires an authenticated, email-verified account — the response
+    includes bidding details (current_highest_bid, bid_count, minimum
+    increment), which are gated the same way as the bid list itself
+    (see ListingBidsView).
+    """
+
+    permission_classes = [IsEmailVerified]
 
     def get(self, request, listing_id):
         now = timezone.now()
