@@ -1,6 +1,8 @@
 """Serializers for the payments app."""
 from rest_framework import serializers
 
+from .models import Order
+
 
 class CreatePaymentIntentSerializer(serializers.Serializer):
     """Validate a request to create a payment intent for an order."""
@@ -16,6 +18,13 @@ class CreatePaymentIntentSerializer(serializers.Serializer):
 
 
 class UpdateFulfillmentSerializer(serializers.Serializer):
-    """Validate an admin fulfilment-status update."""
+    """Validate an admin fulfilment-status update.
 
-    fulfillment_status = serializers.CharField(max_length=20)
+    Allowlist-first (NFSR-IN-03): only values defined in
+    Order.FULFILLMENT_CHOICES are accepted at the serializer boundary,
+    rather than relying solely on the view's later transition check.
+    """
+
+    fulfillment_status = serializers.ChoiceField(
+        choices=[choice[0] for choice in Order.FULFILLMENT_CHOICES]
+    )

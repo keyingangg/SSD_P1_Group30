@@ -252,19 +252,6 @@ class ListingCreateView(APIView):
             metadata={"listing_title": listing.title, "save_as_draft": save_as_draft},
         )
 
-        log_action(
-            user=request.user,
-            action="listing_created",
-            resource_type="Listing",
-            resource_id=listing.id,
-            ip_address=request.META.get("REMOTE_ADDR"),
-            user_agent=request.META.get("HTTP_USER_AGENT", ""),
-            device_fingerprint=_device_fingerprint(request.META.get("REMOTE_ADDR"), request.META.get("HTTP_USER_AGENT", "")),
-            request_method=request.method,
-            endpoint_path=request.path,
-            metadata={"listing_title": listing.title, "save_as_draft": save_as_draft},
-        )
-
         if not save_as_draft:
             _broadcast_catalogue_update()
 

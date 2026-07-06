@@ -157,7 +157,7 @@ Audit logs are append-only by design (integrity). On account deletion, PII field
 
 ---
 
-## 6. Relevant Code Locations
+## 7. Relevant Code Locations
 
 | Component | File |
 |-----------|------|

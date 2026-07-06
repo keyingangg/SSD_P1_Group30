@@ -26,3 +26,9 @@ MAILTO=""
 
 # Retention policy visibility report — weekly, Sunday 03:00.
 0 3 * * 0 cd /var/www/securebid/backend && source venv/bin/activate && DJANGO_SETTINGS_MODULE=securebid.settings.production python manage.py verify_retention_policy >> /var/log/securebid/retention.log 2>&1
+
+# PII anonymisation safety net (NFSR-C-08 / SFR-05c) — daily 02:00. Accounts
+# are anonymised immediately on deletion; this catches any that were missed
+# (e.g. a crash mid-request) so no deleted account retains PII beyond the
+# 30-day window. See PDPA_COMPLIANCE.md §4.
+0 2 * * * cd /var/www/securebid/backend && source venv/bin/activate && DJANGO_SETTINGS_MODULE=securebid.settings.production python manage.py anonymise_deleted_users >> /var/log/securebid/anonymise.log 2>&1
