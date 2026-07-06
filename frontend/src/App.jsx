@@ -38,7 +38,14 @@ export default function App() {
             </ProtectedRoute>
           }
         />
-        <Route path="/listings/:id" element={<ListingDetail />} />
+        <Route
+          path="/listings/:id"
+          element={
+            <ProtectedRoute>
+              <ListingDetail />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/verify-email" element={<VerifyEmail />} />

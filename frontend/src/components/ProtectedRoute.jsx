@@ -17,12 +17,19 @@ export default function ProtectedRoute({ children, requireAdmin = false }) {
     );
   }
 
-  if (!user) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+  // Admin routes must be indistinguishable from a nonexistent route to
+  // anyone who isn't staff, including unauthenticated visitors — redirecting
+  // to /login here (rather than 404) would confirm the route exists before
+  // the user has even proven who they are.
+  if (requireAdmin) {
+    if (!user || !user.is_staff) {
+      return <NotFound />;
+    }
+    return children;
   }
 
-  if (requireAdmin && !user.is_staff) {
-    return <NotFound />;
+  if (!user) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   return children;

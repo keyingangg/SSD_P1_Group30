@@ -159,9 +159,15 @@ class ListingListView(APIView):
     name="get",
 )
 class ListingDetailView(APIView):
-    """View a single published listing's details (public)."""
+    """View a single published listing's details.
 
-    permission_classes = [AllowAny]
+    Requires an authenticated, email-verified account — the response
+    includes bidding details (current_highest_bid, bid_count, minimum
+    increment), which are gated the same way as the bid list itself
+    (see ListingBidsView).
+    """
+
+    permission_classes = [IsEmailVerified]
 
     def get(self, request, listing_id):
         now = timezone.now()
@@ -634,9 +640,15 @@ class BidSubmitView(BidImmutableMixin, APIView):
 
 
 class ListingBidsView(BidImmutableMixin, APIView):
-    """Return all bids for a listing, newest first. Public read."""
+    """Return all bids for a listing, newest first.
 
-    permission_classes = [AllowAny]
+    Requires an authenticated, email-verified account — bid activity (even
+    pseudonymised via anonymous_identifier) is not public, matching the
+    same gate BidConsumer already enforces over the WebSocket feed for
+    this same data.
+    """
+
+    permission_classes = [IsEmailVerified]
 
     def get(self, request, listing_id):
         try:

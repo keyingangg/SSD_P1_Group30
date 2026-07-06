@@ -890,7 +890,7 @@ def _get_admin_target(request, user_id):
     already-anonymised account.
     """
     if not request.user.is_staff:
-        return None, Response({"detail": "Admin access required."}, status=403)
+        return None, Response({"detail": "Not found."}, status=404)
     try:
         target = User.objects.get(pk=user_id)
     except User.DoesNotExist:
