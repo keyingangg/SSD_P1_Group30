@@ -161,6 +161,48 @@ def test_create_listing_requires_authentication(client):
 
 
 @pytest.mark.django_db
+def test_listing_bids_require_auth(client, admin_user):
+    now = timezone.now()
+    listing = Listing.objects.create(
+        created_by=admin_user,
+        title="Live Auction",
+        description="desc",
+        image_key="",
+        category="Others",
+        starting_price="100.00",
+        current_highest_bid="100.00",
+        minimum_increment="5.00",
+        starts_at=now - timedelta(hours=1),
+        ends_at=now + timedelta(hours=1),
+        status="active",
+    )
+
+    resp = client.get(f"/api/auctions/{listing.id}/bids/")
+    assert resp.status_code == 403
+
+
+@pytest.mark.django_db
+def test_listing_bids_visible_to_verified_user(auth_client, admin_user):
+    now = timezone.now()
+    listing = Listing.objects.create(
+        created_by=admin_user,
+        title="Live Auction",
+        description="desc",
+        image_key="",
+        category="Others",
+        starting_price="100.00",
+        current_highest_bid="100.00",
+        minimum_increment="5.00",
+        starts_at=now - timedelta(hours=1),
+        ends_at=now + timedelta(hours=1),
+        status="active",
+    )
+
+    resp = auth_client.get(f"/api/auctions/{listing.id}/bids/")
+    assert resp.status_code == 200
+
+
+@pytest.mark.django_db
 def test_create_listing_accessible_when_authenticated(admin_client):
     resp = admin_client.post(CREATE_URL, {}, format="json")
     assert resp.status_code in (200, 201, 400, 501)

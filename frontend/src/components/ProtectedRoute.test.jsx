@@ -48,6 +48,14 @@ describe("ProtectedRoute", () => {
     expect(screen.getByText("Secret Content")).toBeInTheDocument();
   });
 
+  it("blocks an unauthenticated visitor from an admin-only route with 404, not a login redirect", () => {
+    useAuth.mockReturnValue({ user: null, loading: false });
+    renderProtected({ requireAdmin: true });
+    expect(screen.getByText("404")).toBeInTheDocument();
+    expect(screen.queryByText("Login Page")).not.toBeInTheDocument();
+    expect(screen.queryByText("Secret Content")).not.toBeInTheDocument();
+  });
+
   it("blocks a non-staff user from an admin-only route", () => {
     useAuth.mockReturnValue({ user: { id: "1", is_staff: false }, loading: false });
     renderProtected({ requireAdmin: true });
