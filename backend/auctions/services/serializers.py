@@ -5,8 +5,8 @@ from decimal import Decimal
 
 from rest_framework import serializers
 
-from core.storage import get_signed_url
-from .models import Bid, Listing
+from core.cross_cutting.storage import get_signed_url
+from ..data.models import Bid, Listing
 
 logger = logging.getLogger("securebid")
 

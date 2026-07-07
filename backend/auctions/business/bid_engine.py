@@ -9,8 +9,8 @@ from django.core.exceptions import PermissionDenied
 from django.db import OperationalError, transaction
 from django.utils import timezone
 
-from core.audit import log_action, device_fingerprint as _device_fingerprint
-from .models import Bid, Listing
+from core.cross_cutting.audit import log_action, device_fingerprint as _device_fingerprint
+from ..data.models import Bid, Listing
 
 logger = logging.getLogger("securebid")
 

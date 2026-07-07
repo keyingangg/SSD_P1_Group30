@@ -1,4 +1,4 @@
-"""Channels consumer for live bid updates.
+"""Live bid WebSocket consumer (diagram: svc_bid_ws).
 
 AuthMiddlewareStack re-reads the Django session on every new WebSocket
 handshake, so reconnections always re-verify authentication and email
@@ -11,7 +11,7 @@ from collections import defaultdict
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 
-from .models import Listing
+from ..data.models import Listing
 
 logger = logging.getLogger("securebid")
 
@@ -22,9 +22,6 @@ WS_CLOSE_EMAIL_UNVERIFIED = 4003
 WS_CLOSE_ORIGIN_REJECTED = 4004
 WS_CLOSE_AUCTION_ENDED = 4005
 WS_CLOSE_RATE_LIMITED = 4029
-
-
-CATALOGUE_GROUP = "catalogue"
 
 
 def _group_name(listing_id: str) -> str:
@@ -41,25 +38,13 @@ def _get_listing_runtime_status(listing_id: str) -> str | None:
 
     listing.finalize_if_ended()
     return listing.get_runtime_status()
-class CatalogueConsumer(AsyncJsonWebsocketConsumer):
-    """Broadcasts catalogue-level events (new listings, status changes) to all viewers."""
-
-    async def connect(self):
-        await self.channel_layer.group_add(CATALOGUE_GROUP, self.channel_name)
-        await self.accept()
-
-    async def disconnect(self, close_code):
-        await self.channel_layer.group_discard(CATALOGUE_GROUP, self.channel_name)
-
-    async def catalogue_update(self, event):
-        await self.send_json(event["data"])
 
 
 class BidConsumer(AsyncJsonWebsocketConsumer):
     """Broadcasts anonymised live bid updates to viewers of an auction.
 
-    This consumer is read-only — clients cannot send messages. Bids are
-    submitted via the REST API; successful bids trigger a ``group_send``
+    This consumer is read-only -- clients cannot send messages. Bids are
+    submitted via the REST API; successful bids trigger a group_send
     from the view layer.
     """
 
