@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
-import AdminLayout from "../../components/admin/AdminLayout.jsx";
-import { deleteAdminUser, demoteStaff, getAdminUsers, promoteUser, sendStaffInvite, terminateSessions, toggleUserLock } from "../../api/auth.js";
+import AdminLayout from "../admin-layout/AdminLayout.jsx";
+import { deleteAdminUser, demoteStaff, getAdminUsers, promoteUser, terminateSessions, toggleUserLock } from "../../api/auth.js";
 import { useAuth } from "../../context/AuthContext.jsx";
 
 const ROLE_OPTIONS   = ["All", "Superuser", "Staff", "Bidder"];
@@ -88,11 +89,6 @@ export default function AdminUsers() {
   // matching the server-side IsSuperUser permission on those endpoints.
   const isSuperuser = currentUser?.is_superuser;
 
-  // ── Invite form ────────────────────────────────────────────────────────────
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviting, setInviting]       = useState(false);
-  const [inviteMsg, setInviteMsg]     = useState(null);
-
   // ── User list ──────────────────────────────────────────────────────────────
   const [users, setUsers]     = useState([]);
   const [loading, setLoading] = useState(true);
@@ -125,26 +121,6 @@ export default function AdminUsers() {
     const id = setInterval(() => loadUsers(), 30000);
     return () => clearInterval(id);
   }, [loadUsers]);
-
-  // ── Invite handler ─────────────────────────────────────────────────────────
-  const handleInvite = async (e) => {
-    e.preventDefault();
-    setInviteMsg(null);
-    setInviting(true);
-    try {
-      const data = await sendStaffInvite(inviteEmail);
-      setInviteMsg({ type: "success", text: data.detail });
-      setInviteEmail("");
-      loadUsers(true);
-    } catch (err) {
-      setInviteMsg({
-        type: "error",
-        text: err?.response?.data?.detail || "Failed to send invitation. Please try again.",
-      });
-    } finally {
-      setInviting(false);
-    }
-  };
 
   // ── Lock / Unlock handler ──────────────────────────────────────────────────
   const handleToggleLock = async (userId) => {
@@ -246,43 +222,14 @@ export default function AdminUsers() {
   return (
     <AdminLayout>
       <p className="admin-eyebrow">SecureBid Admin Panel</p>
-      <h1 className="admin-page-title">Users</h1>
-
-      {/* Invite staff — superuser only */}
-      {isSuperuser && (
-      <div className="admin-panel" style={{ marginBottom: "1.5rem" }}>
-        <div className="admin-panel-header">
-          <span className="admin-panel-title">Invite Staff Member</span>
-          <span className="admin-panel-sub">An email invite will be sent — the invitee sets their own password</span>
-        </div>
-        <form onSubmit={handleInvite} style={{ padding: "1.25rem", display: "flex", gap: ".75rem", alignItems: "flex-start", flexWrap: "wrap" }}>
-          <input
-            type="email"
-            placeholder="colleague@example.com"
-            value={inviteEmail}
-            onChange={(e) => setInviteEmail(e.target.value)}
-            required
-            style={{ ...inputStyle, flex: 1, minWidth: 240 }}
-          />
-          <button
-            type="submit"
-            disabled={inviting || !inviteEmail}
-            className="admin-alert-btn"
-            style={{ padding: ".57rem 1.25rem" }}
-          >
-            {inviting ? "Sending…" : "Send Invite"}
-          </button>
-          {inviteMsg && (
-            <p style={{
-              width: "100%", fontSize: ".82rem", marginTop: ".25rem",
-              color: inviteMsg.type === "success" ? "var(--green)" : "var(--danger)",
-            }}>
-              {inviteMsg.text}
-            </p>
-          )}
-        </form>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: ".75rem" }}>
+        <h1 className="admin-page-title">Users</h1>
+        {isSuperuser && (
+          <Link to="/admin/invite-staff" className="admin-alert-btn" style={{ padding: ".57rem 1.25rem", textDecoration: "none" }}>
+            Invite Staff
+          </Link>
+        )}
       </div>
-      )}
 
       {/* User list */}
       <div className="admin-panel">

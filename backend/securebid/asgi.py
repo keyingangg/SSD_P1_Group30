@@ -16,8 +16,8 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "securebid.settings.development"
 # before importing code that may import models.
 django_asgi_app = get_asgi_application()
 
-from auctions.middleware import OriginValidationMiddleware  # noqa: E402
-from auctions.routing import websocket_urlpatterns  # noqa: E402
+from auctions.cross_cutting.middleware import OriginValidationMiddleware  # noqa: E402
+from auctions.services.routing import websocket_urlpatterns  # noqa: E402
 
 application = ProtocolTypeRouter(
     {

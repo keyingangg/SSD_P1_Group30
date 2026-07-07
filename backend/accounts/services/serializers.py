@@ -2,7 +2,7 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .password import is_password_breached
+from ..business.password import is_password_breached
 
 User = get_user_model()
 

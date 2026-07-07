@@ -16,7 +16,8 @@ def clear_mail_outbox():
 @pytest.fixture(autouse=True)
 def bypass_hibp_check():
     """Prevent real HIBP network calls during tests — always allow the password."""
-    with patch("accounts.password.is_password_breached", return_value=False):
+    with patch("accounts.services.serializers.is_password_breached", return_value=False), \
+         patch("accounts.services.password_view.is_password_breached", return_value=False):
         yield
 
 

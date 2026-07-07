@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { getUserDashboard } from "../api/auctions.js";
-import { useAuth } from "../context/AuthContext.jsx";
-import { useWebSocket } from "../hooks/useWebSocket.js";
+import { getUserDashboard } from "../../api/auctions.js";
+import { useAuth } from "../../context/AuthContext.jsx";
+import { useWebSocket } from "../../hooks/useWebSocket.js";
 
 function formatSGD(value) {
   const n = Number(value);

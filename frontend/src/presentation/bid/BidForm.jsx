@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { submitBid } from "../api/auctions.js";
+import { submitBid } from "../../api/auctions.js";
 
 export default function BidForm({ listingId, listing, onBidPlaced, onBidRejected, onBidConflict }) {
   const [amount, setAmount] = useState("");

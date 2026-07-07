@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
-import AdminLayout from "../../components/admin/AdminLayout.jsx";
+import AdminLayout from "../admin-layout/AdminLayout.jsx";
 import { createListing, getListingDetail, updateListing, uploadListingImage } from "../../api/auctions.js";
 import { getCategoryOptions } from "../../config/categories.js";
 

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from rest_framework.exceptions import ValidationError
 
-from core import storage
+from core.cross_cutting import storage
 
 PNG_BYTES = bytes.fromhex(
     "89504e470d0a1a0a0000000d49484452000000010000000108020000009077"
@@ -25,7 +25,7 @@ def reset_client_cache():
 @pytest.fixture
 def mock_supabase_client():
     client = MagicMock()
-    with patch("core.storage.create_client", return_value=client):
+    with patch("core.cross_cutting.storage.create_client", return_value=client):
         yield client
 
 
@@ -33,7 +33,7 @@ def test_upload_image_stores_under_server_generated_uuid_name(mock_supabase_clie
     bucket = mock_supabase_client.storage.from_.return_value
     file_obj = io.BytesIO(PNG_BYTES)
 
-    with patch("core.storage.scan_for_malware"):
+    with patch("core.cross_cutting.storage.scan_for_malware"):
         object_key = storage.upload_image(file_obj, "../../etc/passwd.png")
 
     name, ext = object_key.rsplit(".", 1)

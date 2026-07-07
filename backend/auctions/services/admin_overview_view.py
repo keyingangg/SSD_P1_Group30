@@ -5,7 +5,7 @@ from rest_framework.views import APIView
 
 from accounts.services.permissions import IsAdminUser
 
-from ..data.models import Bid, Listing
+from ..business.listing_management_service import get_active_listings_summary
 
 
 class AdminOverviewView(APIView):
@@ -20,12 +20,10 @@ class AdminOverviewView(APIView):
 
         User = get_user_model()
         now = timezone.now()
-        today = now.date()
 
-        active_listings = Listing.objects.filter(status="active")
+        active_listing_count, bids_today, active_auction_data = get_active_listings_summary(now)
         pending_payment_count = Order.objects.filter(fulfillment_status="pending_payment").count()
 
-        bids_today = Bid.objects.filter(submitted_at__date=today).count()
         registered_users = User.objects.filter(is_anonymised=False).count()
 
         recent_audit = (
@@ -58,19 +56,9 @@ class AdminOverviewView(APIView):
                 "is_admin": is_admin,
             })
 
-        active_auction_data = []
-        for listing in active_listings.order_by("ends_at")[:10]:
-            active_auction_data.append({
-                "id": str(listing.id),
-                "lot": str(listing.id)[:8].upper(),
-                "name": listing.title,
-                "bid": str(listing.current_highest_bid),
-                "ends_at": listing.ends_at.isoformat() if listing.ends_at else None,
-            })
-
         return Response({
             "stats": {
-                "active_listings": active_listings.count(),
+                "active_listings": active_listing_count,
                 "pending_payments": pending_payment_count,
                 "bids_today": bids_today,
                 "registered_users": registered_users,

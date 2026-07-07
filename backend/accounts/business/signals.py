@@ -1,8 +1,8 @@
 import logging
 
 from auditlog.models import LogEntry
-from core.alerts import send_security_alert
-from core.audit import log_action
+from core.cross_cutting.alerts import send_security_alert
+from core.cross_cutting.audit import log_action
 from axes.signals import user_locked_out
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from .emails import send_account_lockout_email
 from .lockout import apply_escalating_lockout
-from .models import AccountLockoutProfile
+from ..data.models import AccountLockoutProfile
 
 logger = logging.getLogger("securebid")
 

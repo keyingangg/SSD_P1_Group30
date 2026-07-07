@@ -1,8 +1,8 @@
 import { Link, Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { useAuth } from "../context/AuthContext.jsx";
-import { BRAND } from "../config/brand.js";
-import { getListings } from "../api/auctions.js";
+import { useAuth } from "../../context/AuthContext.jsx";
+import { BRAND } from "../../config/brand.js";
+import { getListings } from "../../api/auctions.js";
 
 const SGD = (n) => `S$${Number(n).toLocaleString()}`;
 

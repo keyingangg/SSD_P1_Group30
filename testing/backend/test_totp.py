@@ -237,7 +237,7 @@ def test_invalid_mfa_login_code_triggers_axes_signal(verified_user, client):
     _make_device(verified_user)
     client.post(LOGIN_URL, {"email": verified_user.email, "password": "StrongPass123!"}, format="json")
 
-    with patch("accounts.views.user_login_failed") as mock_signal:
+    with patch("accounts.services.mfa_view.user_login_failed") as mock_signal:
         client.post(MFA_LOGIN_VERIFY_URL, {"otp_code": "000000"}, format="json")
         mock_signal.send.assert_called_once()
 
@@ -245,7 +245,7 @@ def test_invalid_mfa_login_code_triggers_axes_signal(verified_user, client):
 @pytest.mark.django_db
 def test_invalid_enrol_confirm_code_triggers_axes_signal(auth_client, verified_user):
     auth_client.get(MFA_ENROL_URL)
-    with patch("accounts.views.user_login_failed") as mock_signal:
+    with patch("accounts.services.mfa_view.user_login_failed") as mock_signal:
         auth_client.post(MFA_ENROL_CONFIRM_URL, {"otp_code": "000000"}, format="json")
         mock_signal.send.assert_called_once()
 
@@ -265,7 +265,7 @@ def test_delete_account_with_mfa_enrolled_requires_otp(auth_client, verified_use
 @pytest.mark.django_db
 def test_delete_account_with_mfa_valid_otp_succeeds(auth_client, verified_user):
     device, token = _make_device(verified_user)
-    with patch("accounts.views.invalidate_all_user_sessions"):
+    with patch("accounts.services.delete_account_view.invalidate_all_user_sessions"):
         resp = auth_client.post(DELETE_ACCOUNT_URL, {"current_password": "StrongPass123!", "otp_code": token}, format="json")
     assert resp.status_code == 200
     # Soft-delete: user row is kept with PII anonymised (NFSR-C-08 / SFR-05c).
@@ -284,7 +284,7 @@ def test_delete_account_with_mfa_invalid_otp_returns_400(auth_client, verified_u
 
 @pytest.mark.django_db
 def test_delete_account_without_mfa_succeeds_without_otp(auth_client, verified_user):
-    with patch("accounts.views.invalidate_all_user_sessions"):
+    with patch("accounts.services.delete_account_view.invalidate_all_user_sessions"):
         resp = auth_client.post(DELETE_ACCOUNT_URL, {"current_password": "StrongPass123!"}, format="json")
     assert resp.status_code == 200
     # Soft-delete: user row is kept with PII anonymised (NFSR-C-08 / SFR-05c).

@@ -6,6 +6,7 @@ from rest_framework.views import APIView
 
 from accounts.services.permissions import IsEmailVerifiedSilent
 
+from ..business.listing_service import finalize_ended_auctions
 from ..data.models import Bid, Listing
 
 
@@ -20,7 +21,7 @@ class UserDashboardView(APIView):
         if request.user.is_staff:
             return Response({"detail": "Admins cannot access the bidder dashboard."}, status=403)
 
-        Listing.finalize_ended_auctions()
+        finalize_ended_auctions()
 
         now = timezone.now()
         user_id = request.user.id

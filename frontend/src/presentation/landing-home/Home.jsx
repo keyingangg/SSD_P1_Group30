@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { getListings } from "../api/auctions.js";
-import AuctionCard from "../components/AuctionCard.jsx";
-import { useWebSocket } from "../hooks/useWebSocket.js";
+import { getListings } from "../../api/auctions.js";
+import AuctionCard from "../common/AuctionCard.jsx";
+import { useWebSocket } from "../../hooks/useWebSocket.js";
 
 function runtimeStatus(l) {
   const s = String(l.status || "").toLowerCase();

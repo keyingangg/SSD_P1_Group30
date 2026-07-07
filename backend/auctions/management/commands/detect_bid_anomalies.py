@@ -11,16 +11,14 @@ Run on a schedule (e.g. every few minutes via cron):
     python manage.py detect_bid_anomalies --threshold 20 --window 1
     python manage.py detect_bid_anomalies --dry-run
 """
-from datetime import timedelta
-
 from django.core.management.base import BaseCommand
-from django.db.models import Count
-from django.utils import timezone
 
-from auctions.emails import send_bid_anomaly_email
-from auctions.models import Bid
-from core.alerts import send_security_alert
-from core.audit import log_action
+from auctions.business.bid_anomaly_detection import (
+    alert_anomaly,
+    find_anomalous_bidders,
+    log_anomaly,
+    notify_anomalous_bidder,
+)
 
 
 class Command(BaseCommand):
@@ -50,13 +48,7 @@ class Command(BaseCommand):
         window = options["window"]
         dry_run = options["dry_run"]
 
-        cutoff = timezone.now() - timedelta(minutes=window)
-        flagged = (
-            Bid.objects.filter(submitted_at__gte=cutoff, bidder__isnull=False)
-            .values("bidder_id", "bidder__email")
-            .annotate(bid_count=Count("id"))
-            .filter(bid_count__gt=threshold)
-        )
+        flagged = find_anomalous_bidders(threshold, window)
 
         count = 0
         for row in flagged:
@@ -72,34 +64,14 @@ class Command(BaseCommand):
                 continue
 
             try:
-                send_bid_anomaly_email(email, bid_count, window)
+                notify_anomalous_bidder(email, bid_count, window)
             except Exception as exc:
                 self.stderr.write(f"  Failed to email {email}: {exc}")
 
-            log_action(
-                user=None,
-                action="bid_anomaly_detected",
-                resource_type="User",
-                resource_id=bidder_id,
-                metadata={"bid_count": bid_count, "window_minutes": window},
-            )
+            log_anomaly(bidder_id, bid_count, window)
 
             try:
-                send_security_alert(
-                    subject="Excessive bid submission rate",
-                    message=(
-                        f"Bidder {email} ({bidder_id}) submitted {bid_count} bids "
-                        f"in the last {window} minute(s), exceeding the {threshold}/min threshold."
-                    ),
-                    severity="high",
-                    metadata={
-                        "bidder_id": str(bidder_id),
-                        "email": email,
-                        "bid_count": bid_count,
-                        "window_minutes": window,
-                        "threshold": threshold,
-                    },
-                )
+                alert_anomaly(bidder_id, email, bid_count, threshold, window)
             except Exception as exc:
                 self.stderr.write(f"  Failed to send security alert for {email}: {exc}")
 

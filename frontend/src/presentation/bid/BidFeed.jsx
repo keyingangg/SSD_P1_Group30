@@ -1,4 +1,4 @@
-import { useBidFeed } from "../hooks/useBidFeed.js";
+import { useBidFeed } from "../../hooks/useBidFeed.js";
 
 export function timeAgo(timestamp) {
   if (!timestamp) return "";

@@ -1,4 +1,4 @@
-import { BRAND } from "../config/brand.js";
+import { BRAND } from "../../config/brand.js";
 
 // Brand mark: gold "SB" tile + wordmark + established year.
 export default function Logo() {

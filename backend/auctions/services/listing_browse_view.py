@@ -1,5 +1,4 @@
 """Public listing browse/detail API (diagram: svc_listing_browse)."""
-from django.db.models import Count
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django_ratelimit.decorators import ratelimit
@@ -10,6 +9,7 @@ from rest_framework.views import APIView
 from accounts.services.permissions import IsEmailVerified
 
 from core.cross_cutting.audit import log_action, device_fingerprint as _device_fingerprint
+from ..business.listing_service import finalize_and_activate_listings, is_visible_to, search_listings
 from ..data.models import Listing
 from .serializers import ListingSearchQuerySerializer, ListingSerializer
 
@@ -51,25 +51,8 @@ class ListingListView(APIView):
         params = query.validated_data
 
         now = timezone.now()
-        Listing.finalize_ended_auctions(now=now)
-        Listing.objects.filter(
-            status="scheduled", starts_at__lte=now, ends_at__gt=now
-        ).update(status="active")
-        queryset = Listing.objects.annotate(_bid_count=Count("bids"))
-        if not request.user.is_staff:
-            queryset = queryset.exclude(status__in=["draft", "cancelled", "scheduled"])
-
-        if params.get("q"):
-            queryset = queryset.filter(title__icontains=params["q"])
-        if params.get("category"):
-            queryset = queryset.filter(category=params["category"])
-        if params.get("status"):
-            queryset = queryset.filter(status=params["status"])
-        if params.get("min_price") is not None:
-            queryset = queryset.filter(current_highest_bid__gte=params["min_price"])
-        if params.get("max_price") is not None:
-            queryset = queryset.filter(current_highest_bid__lte=params["max_price"])
-        queryset = queryset.order_by(params.get("ordering", "-starts_at"))
+        finalize_and_activate_listings(now=now)
+        queryset = search_listings(params, request.user.is_staff)
 
         serializer = ListingSerializer(queryset, many=True)
         return Response(serializer.data)
@@ -92,16 +75,13 @@ class ListingDetailView(APIView):
 
     def get(self, request, listing_id):
         now = timezone.now()
-        Listing.finalize_ended_auctions(now=now)
-        Listing.objects.filter(
-            status="scheduled", starts_at__lte=now, ends_at__gt=now
-        ).update(status="active")
+        finalize_and_activate_listings(now=now)
         try:
             listing = Listing.objects.get(pk=listing_id)
         except Listing.DoesNotExist:
             return Response({"detail": "Listing not found."}, status=404)
 
-        if not request.user.is_staff and listing.status in {"draft", "cancelled", "scheduled"}:
+        if not is_visible_to(listing, request.user.is_staff):
             log_action(
                 user=request.user if getattr(request.user, "is_authenticated", False) else None,
                 action="listing_access_denied",

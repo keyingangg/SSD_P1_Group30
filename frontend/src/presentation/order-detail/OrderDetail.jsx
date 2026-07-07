@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { getOrderDetail } from "../api/payments.js";
+import { getOrderDetail } from "../../api/payments.js";
 
 function formatMoney(cents, currency) {
   const value = Number(cents) / 100;

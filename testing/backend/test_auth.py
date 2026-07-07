@@ -4,7 +4,7 @@ from django.utils import timezone
 from django.contrib.auth import get_user_model
 from django.core import mail
 
-from accounts.tokens import (
+from accounts.business.tokens import (
     generate_email_verification_token,
     generate_password_reset_token,
     generate_staff_invite_token,

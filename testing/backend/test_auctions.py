@@ -7,7 +7,7 @@ from channels.testing import WebsocketCommunicator
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from auctions.consumers import BidConsumer, WS_CLOSE_AUCTION_ENDED
+from auctions.services.consumers import BidConsumer, WS_CLOSE_AUCTION_ENDED
 from auctions.models import Bid, Listing
 from payments.models import Order
 

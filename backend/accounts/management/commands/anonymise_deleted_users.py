@@ -17,7 +17,7 @@ from datetime import timedelta
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from accounts.anonymisation import anonymise_user_data
+from accounts.business.anonymisation import anonymise_user_data
 from accounts.models import User
 
 

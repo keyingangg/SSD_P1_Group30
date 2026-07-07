@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
-import AuthLayout from "../components/auth/AuthLayout.jsx";
-import PasswordStrengthMeter from "../components/auth/PasswordStrengthMeter.jsx";
-import { BRAND } from "../config/brand.js";
-import { registerUser } from "../api/auth.js";
+import AuthLayout from "./AuthLayout.jsx";
+import PasswordStrengthMeter from "./PasswordStrengthMeter.jsx";
+import { BRAND } from "../../config/brand.js";
+import { registerUser } from "../../api/auth.js";
 
 export default function Register() {
   const [email, setEmail] = useState("");

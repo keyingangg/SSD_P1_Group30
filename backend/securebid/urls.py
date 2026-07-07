@@ -6,9 +6,9 @@ from django.urls import include, path
 
 urlpatterns = [
     path("sb-manage/", admin.site.urls),
-    path("api/accounts/", include("accounts.urls")),
-    path("api/auctions/", include("auctions.urls")),
-    path("api/payments/", include("payments.urls")),
+    path("api/accounts/", include("accounts.services.urls")),
+    path("api/auctions/", include("auctions.services.urls")),
+    path("api/payments/", include("payments.services.urls")),
 ]
 
 # Serve media files in development.

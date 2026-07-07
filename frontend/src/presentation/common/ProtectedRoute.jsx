@@ -1,7 +1,7 @@
 import { Navigate, useLocation } from "react-router-dom";
 
-import { useAuth } from "../context/AuthContext.jsx";
-import NotFound from "../pages/NotFound.jsx";
+import { useAuth } from "../../context/AuthContext.jsx";
+import NotFound from "./NotFound.jsx";
 
 // Guards routes that require authentication. Pass `requireAdmin` to restrict
 // a route to admin users.

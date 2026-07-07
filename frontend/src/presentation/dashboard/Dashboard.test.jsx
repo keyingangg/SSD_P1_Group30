@@ -3,19 +3,19 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 import Dashboard from "./Dashboard.jsx";
-import { useAuth } from "../context/AuthContext.jsx";
-import { useWebSocket } from "../hooks/useWebSocket.js";
-import { getUserDashboard } from "../api/auctions.js";
+import { useAuth } from "../../context/AuthContext.jsx";
+import { useWebSocket } from "../../hooks/useWebSocket.js";
+import { getUserDashboard } from "../../api/auctions.js";
 
-vi.mock("../context/AuthContext.jsx", () => ({
+vi.mock("../../context/AuthContext.jsx", () => ({
   useAuth: vi.fn(),
 }));
 
-vi.mock("../hooks/useWebSocket.js", () => ({
+vi.mock("../../hooks/useWebSocket.js", () => ({
   useWebSocket: vi.fn(),
 }));
 
-vi.mock("../api/auctions.js", () => ({
+vi.mock("../../api/auctions.js", () => ({
   getUserDashboard: vi.fn(),
 }));
 

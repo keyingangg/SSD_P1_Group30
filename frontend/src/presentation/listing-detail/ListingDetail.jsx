@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
-import { getListingDetail } from "../api/auctions.js";
-import AuctionExtendedDetails from "../components/AuctionExtendedDetails.jsx";
-import BidFeed from "../components/BidFeed.jsx";
-import BidForm from "../components/BidForm.jsx";
-import CountdownTimer from "../components/CountdownTimer.jsx";
-import { useAuth } from "../context/AuthContext.jsx";
-import { useBidFeed } from "../hooks/useBidFeed.js";
-import "../styles/listing-detail.css";
+import { getListingDetail } from "../../api/auctions.js";
+import AuctionExtendedDetails from "../common/AuctionExtendedDetails.jsx";
+import BidFeed from "../bid/BidFeed.jsx";
+import BidForm from "../bid/BidForm.jsx";
+import CountdownTimer from "../common/CountdownTimer.jsx";
+import { useAuth } from "../../context/AuthContext.jsx";
+import { useBidFeed } from "../../hooks/useBidFeed.js";
+import "../../styles/listing-detail.css";
 
 function formatSGD(value) {
   const n = Number(value);

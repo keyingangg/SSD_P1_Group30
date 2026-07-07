@@ -8,11 +8,11 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 
 import Login from "./Login.jsx";
-import ProtectedRoute from "../components/ProtectedRoute.jsx";
-import { AuthProvider } from "../context/AuthContext.jsx";
-import * as authApi from "../api/auth.js";
+import ProtectedRoute from "../common/ProtectedRoute.jsx";
+import { AuthProvider } from "../../context/AuthContext.jsx";
+import * as authApi from "../../api/auth.js";
 
-vi.mock("../api/auth.js", () => ({
+vi.mock("../../api/auth.js", () => ({
   fetchCsrf: vi.fn(),
   getProfile: vi.fn(),
   loginUser: vi.fn(),

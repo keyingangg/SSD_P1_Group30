@@ -58,8 +58,8 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "core.middleware.RBACMiddleware",
-    "core.middleware.SecurityHeadersMiddleware",
+    "core.cross_cutting.middleware.RBACMiddleware",
+    "core.cross_cutting.middleware.SecurityHeadersMiddleware",
     # django-axes must be the last authentication-related middleware.
     "axes.middleware.AxesMiddleware",
 ]
@@ -93,7 +93,7 @@ AUTH_USER_MODEL = "accounts.User"
 # django-axes backend must come before the custom ModelBackend.
 AUTHENTICATION_BACKENDS = [
     "axes.backends.AxesStandaloneBackend",
-    "accounts.auth_backend.EscalatingLockoutBackend",
+    "accounts.business.auth_backend.EscalatingLockoutBackend",
 ]
 
 # Argon2id is the OWASP-recommended password hashing algorithm.
@@ -180,9 +180,9 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
-    "DEFAULT_PAGINATION_CLASS": "core.pagination.StandardResultsPagination",
+    "DEFAULT_PAGINATION_CLASS": "core.cross_cutting.pagination.StandardResultsPagination",
     "PAGE_SIZE": 20,
-    "EXCEPTION_HANDLER": "core.exceptions.custom_exception_handler",
+    "EXCEPTION_HANDLER": "core.cross_cutting.exceptions.custom_exception_handler",
     # Only accept application/json by default — other Content-Types get HTTP 415
     # (NFSR-IN-03). Views that need multipart (image upload) override this with
     # parser_classes = [MultiPartParser] directly on the view class.

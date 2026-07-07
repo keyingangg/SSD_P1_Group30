@@ -1,4 +1,4 @@
-import Logo from "../Logo.jsx";
+import Logo from "../common/Logo.jsx";
 import { BRAND } from "../../config/brand.js";
 
 // Two-column layout shared by the Sign In, Create Account, and Verify Email

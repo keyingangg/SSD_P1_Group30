@@ -38,7 +38,7 @@ def anonymise_user_data(user) -> None:
     if user.is_anonymised:
         return
 
-    from core.models import AuditLog
+    from core.data.models import AuditLog
     from payments.models import Order
 
     user_id = user.id

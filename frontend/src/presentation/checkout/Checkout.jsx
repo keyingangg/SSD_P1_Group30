@@ -8,7 +8,7 @@ import {
   useElements,
 } from "@stripe/react-stripe-js";
 
-import { getOrderDetail, createPaymentIntent, confirmPaymentIntent } from "../api/payments.js";
+import { getOrderDetail, createPaymentIntent, confirmPaymentIntent } from "../../api/payments.js";
 
 function formatMoney(cents, currency) {
   const value = Number(cents) / 100;

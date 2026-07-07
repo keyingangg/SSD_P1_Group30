@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import AuthLayout from "../components/auth/AuthLayout.jsx";
-import { verifyEmail } from "../api/auth.js";
+import AuthLayout from "../auth/AuthLayout.jsx";
+import { verifyEmail } from "../../api/auth.js";
 
 // Landing page for the verification link emailed at registration.
 // Reads ?token= from the URL and confirms it against the backend.

@@ -62,7 +62,7 @@ def custom_exception_handler(exc, context):
 def _log_rate_limit_breach(context):
     """Write an audit log entry for a rate-limit breach (SFR-11g)."""
     try:
-        from core.audit import log_action
+        from core.cross_cutting.audit import log_action
 
         request = context.get("request")
         view = context.get("view")

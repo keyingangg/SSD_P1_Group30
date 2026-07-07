@@ -1,7 +1,7 @@
 """Serializers for the payments app."""
 from rest_framework import serializers
 
-from .models import Order
+from ..data.models import Order
 
 
 class CreatePaymentIntentSerializer(serializers.Serializer):

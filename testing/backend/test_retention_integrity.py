@@ -5,8 +5,8 @@ import pytest
 from django.core.management import call_command
 from django.db import connection, transaction
 
-from core.audit import log_action
-from core.models import AuditLog
+from core.cross_cutting.audit import log_action
+from core.data.models import AuditLog
 
 
 @pytest.mark.django_db

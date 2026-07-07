@@ -10,7 +10,7 @@ from datetime import timedelta
 from django.utils import timezone
 from django.utils.crypto import constant_time_compare
 
-from .models import EmailVerificationToken, PasswordResetToken, StaffInviteToken
+from ..data.models import EmailVerificationToken, PasswordResetToken, StaffInviteToken
 
 EMAIL_TOKEN_TTL = timedelta(hours=24)
 RESET_TOKEN_TTL = timedelta(minutes=10)

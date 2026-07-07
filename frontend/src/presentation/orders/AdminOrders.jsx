@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import AdminLayout from "../../components/admin/AdminLayout.jsx";
+import AdminLayout from "../admin-layout/AdminLayout.jsx";
 import { getAdminOrders, updateFulfillmentStatus } from "../../api/payments.js";
 
 function fmtSGD(cents) {

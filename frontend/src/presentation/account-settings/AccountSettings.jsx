@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { getMFAStatus, startMFAEnrol, confirmMFAEnrol, unenrolMFA, deleteAccount, changePassword } from "../api/auth.js";
-import { useAuth } from "../context/AuthContext.jsx";
+import { getMFAStatus, startMFAEnrol, confirmMFAEnrol, unenrolMFA, deleteAccount, changePassword } from "../../api/auth.js";
+import { useAuth } from "../../context/AuthContext.jsx";
 
 export default function AccountSettings() {
   const { user, logout } = useAuth();

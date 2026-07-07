@@ -22,9 +22,9 @@ Run on a schedule (e.g. daily cron):
 """
 from django.core.management.base import BaseCommand
 
-from core.alerts import send_security_alert
-from core.audit import _compute_row_hash
-from core.models import AuditLog
+from core.cross_cutting.alerts import send_security_alert
+from core.cross_cutting.audit import _compute_row_hash
+from core.data.models import AuditLog
 
 ANONYMISED_MARKER = "[PII_ANONYMISED]"
 

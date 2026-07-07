@@ -5,7 +5,7 @@ import uuid
 from django.conf import settings
 from supabase import create_client
 
-from core.validators import (
+from core.cross_cutting.validators import (
     scan_for_malware,
     validate_file_extension,
     validate_file_size,

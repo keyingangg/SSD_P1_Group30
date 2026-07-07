@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
-import AdminLayout from "../../components/admin/AdminLayout.jsx";
+import AdminLayout from "../admin-layout/AdminLayout.jsx";
 import { BRAND } from "../../config/brand.js";
 import { getAdminOverview } from "../../api/auctions.js";
 import { useWebSocket } from "../../hooks/useWebSocket.js";

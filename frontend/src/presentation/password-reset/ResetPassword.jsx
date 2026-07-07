@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import AuthLayout from "../components/auth/AuthLayout.jsx";
-import PasswordStrengthMeter from "../components/auth/PasswordStrengthMeter.jsx";
-import { confirmPasswordReset } from "../api/auth.js";
+import AuthLayout from "../auth/AuthLayout.jsx";
+import PasswordStrengthMeter from "../auth/PasswordStrengthMeter.jsx";
+import { confirmPasswordReset } from "../../api/auth.js";
 
 export default function ResetPassword() {
   const [params] = useSearchParams();

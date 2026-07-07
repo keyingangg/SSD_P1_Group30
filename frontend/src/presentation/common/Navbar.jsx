@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import Logo from "./Logo.jsx";
-import { useAuth } from "../context/AuthContext.jsx";
+import { useAuth } from "../../context/AuthContext.jsx";
 
 const HIDDEN_ON = ["/", "/login", "/register", "/verify-email", "/forgot-password", "/reset-password", "/accept-invite"];
 

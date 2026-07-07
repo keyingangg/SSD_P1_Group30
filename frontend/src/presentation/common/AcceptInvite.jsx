@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-import AuthLayout from "../components/auth/AuthLayout.jsx";
-import PasswordStrengthMeter from "../components/auth/PasswordStrengthMeter.jsx";
-import { acceptInvite } from "../api/auth.js";
-import { BRAND } from "../config/brand.js";
+import AuthLayout from "../auth/AuthLayout.jsx";
+import PasswordStrengthMeter from "../auth/PasswordStrengthMeter.jsx";
+import { acceptInvite } from "../../api/auth.js";
+import { BRAND } from "../../config/brand.js";
 
 export default function AcceptInvite() {
   const [params] = useSearchParams();

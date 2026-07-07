@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
-import AdminLayout from "../../components/admin/AdminLayout.jsx";
+import AdminLayout from "../admin-layout/AdminLayout.jsx";
 import axiosClient from "../../api/axiosClient.js";
 import { deleteListing, getListings } from "../../api/auctions.js";
 import { useWebSocket } from "../../hooks/useWebSocket.js";

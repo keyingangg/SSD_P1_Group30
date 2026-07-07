@@ -1,6 +1,5 @@
 """Listing management API for admins (diagram: svc_listing_admin)."""
 import logging
-from decimal import Decimal
 
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -12,7 +11,14 @@ from accounts.services.permissions import IsAdminUser
 from core.cross_cutting.audit import log_action, device_fingerprint as _device_fingerprint
 from ..business.broadcast_service import broadcast_catalogue_update
 from ..business.emails import send_auction_cancelled_email
-from ..data.models import Bid, Listing
+from ..business.listing_management_service import (
+    ListingActionBlocked,
+    assert_can_delete,
+    cancel_listing,
+    create_listing,
+    update_listing,
+)
+from ..data.models import Listing
 from .serializers import ListingCreateSerializer
 
 logger = logging.getLogger("securebid")
@@ -29,29 +35,7 @@ class ListingCreateView(APIView):
         serializer = ListingCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        data = serializer.validated_data
-        save_as_draft = data.get("save_as_draft", False)
-
-        img_key = data.get("image_key")
-        if isinstance(img_key, str) and img_key.strip() == "":
-            img_key = None
-
-        starts_at = data.get("starts_at")
-        ends_at = data.get("ends_at")
-        minimum_increment = data.get("minimum_increment") or Decimal("1.00")
-
-        listing = Listing.objects.create(
-            created_by=request.user,
-            title=data["title"],
-            description=data.get("description", ""),
-            image_key=img_key,
-            category=data.get("category", "Others"),
-            starting_price=data.get("starting_price") or Decimal("0.00"),
-            minimum_increment=minimum_increment,
-            starts_at=starts_at,
-            ends_at=ends_at,
-            status="draft" if save_as_draft else Listing.determine_status(starts_at, ends_at),
-        )
+        listing, save_as_draft = create_listing(serializer.validated_data, request.user)
 
         log_action(
             user=request.user,
@@ -89,70 +73,15 @@ class ListingUpdateView(APIView):
         except Listing.DoesNotExist:
             return Response({"detail": "Listing not found."}, status=404)
 
-        has_bids = listing.bids.exists()
-        saving_as_draft = request.data.get("save_as_draft", False)
-
-        # Bids have been placed -- no further changes allowed (except on cancelled listings)
-        if has_bids and listing.status != "cancelled":
-            return Response(
-                {"detail": "This listing cannot be modified because bids have already been placed. Cancel the auction first, then make changes."},
-                status=409,
-            )
-
-        # Active (live) auction with no bids: allow save-as-draft to pull it back,
-        # but block re-publishing (admins must cancel first to change the schedule).
-        if listing.status == "active" and not saving_as_draft:
-            return Response(
-                {"detail": "This listing cannot be modified while the auction is live. Cancel it first."},
-                status=409,
-            )
-
         serializer = ListingCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        data = serializer.validated_data
-        save_as_draft = data.get("save_as_draft", False)
-
-        # Capture state before modification for the audit trail (NFSR-AC-03).
-        before_snapshot = {
-            "title": listing.title,
-            "description": listing.description,
-            "category": listing.category,
-            "starting_price": str(listing.starting_price),
-            "minimum_increment": str(listing.minimum_increment),
-            "starts_at": listing.starts_at.isoformat() if listing.starts_at else None,
-            "ends_at": listing.ends_at.isoformat() if listing.ends_at else None,
-            "status": listing.status,
-        }
-
-        listing.title = data["title"]
-        listing.description = data.get("description", listing.description)
-        listing.category = data.get("category", listing.category)
-        listing.image_key = data.get("image_key", listing.image_key)
-        listing.starting_price = data.get("starting_price") or listing.starting_price or Decimal("0.00")
-        listing.minimum_increment = data.get("minimum_increment", listing.minimum_increment)
-        listing.starts_at = data.get("starts_at", listing.starts_at)
-        listing.ends_at = data.get("ends_at", listing.ends_at)
-
-        if listing.status == "cancelled":
-            pass
-        elif save_as_draft:
-            listing.status = "draft"
-        else:
-            listing.status = Listing.determine_status(listing.starts_at, listing.ends_at)
-
-        listing.save()
-
-        after_snapshot = {
-            "title": listing.title,
-            "description": listing.description,
-            "category": listing.category,
-            "starting_price": str(listing.starting_price),
-            "minimum_increment": str(listing.minimum_increment),
-            "starts_at": listing.starts_at.isoformat() if listing.starts_at else None,
-            "ends_at": listing.ends_at.isoformat() if listing.ends_at else None,
-            "status": listing.status,
-        }
+        try:
+            before_snapshot, after_snapshot, save_as_draft = update_listing(
+                listing, serializer.validated_data
+            )
+        except ListingActionBlocked as exc:
+            return Response({"detail": str(exc)}, status=409)
 
         log_action(
             user=request.user,
@@ -193,18 +122,10 @@ class ListingDeleteView(APIView):
         except Listing.DoesNotExist:
             return Response({"detail": "Listing not found."}, status=404)
 
-        # SFR-06c: prevent deletion of a listing that has received bids
-        # unless the auction has already been cancelled.
-        if listing.bids.exists() and listing.status != "cancelled":
-            return Response(
-                {
-                    "detail": (
-                        "This listing cannot be deleted because bids have already been placed. "
-                        "Cancel the auction first, then delete it."
-                    )
-                },
-                status=409,
-            )
+        try:
+            assert_can_delete(listing)
+        except ListingActionBlocked as exc:
+            return Response({"detail": str(exc)}, status=409)
 
         log_action(
             user=request.user,
@@ -242,16 +163,7 @@ class ListingCancelView(APIView):
         if listing.status == "cancelled":
             return Response({"detail": "Listing is already cancelled."}, status=400)
 
-        # Collect unique bidder emails before status change.
-        bidder_emails = list(
-            Bid.objects.filter(listing=listing)
-            .select_related("bidder")
-            .values_list("bidder__email", flat=True)
-            .distinct()
-        )
-
-        listing.status = "cancelled"
-        listing.save(update_fields=["status", "updated_at"])
+        bidder_emails = cancel_listing(listing)
 
         # Notify every bidder whose bids are now void.
         notified = 0

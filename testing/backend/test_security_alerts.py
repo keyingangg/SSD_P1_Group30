@@ -10,12 +10,12 @@ from django.test import override_settings
 from django.utils import timezone
 
 from accounts.models import AccountLockoutProfile
-from accounts.signals import handle_user_locked_out
+from accounts.business.signals import handle_user_locked_out
 from auctions.models import Bid, Listing
-from core.alerts import send_security_alert
-from core.audit import log_action
-from core.models import AuditLog
-from core.security_monitoring import record_authz_denial
+from core.cross_cutting.alerts import send_security_alert
+from core.cross_cutting.audit import log_action
+from core.data.models import AuditLog
+from core.cross_cutting.security_monitoring import record_authz_denial
 
 
 @pytest.fixture(autouse=True)

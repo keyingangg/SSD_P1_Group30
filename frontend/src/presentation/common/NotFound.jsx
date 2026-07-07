@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 
-import { BRAND } from "../config/brand.js";
-import "../styles/not-found.css";
+import { BRAND } from "../../config/brand.js";
+import "../../styles/not-found.css";
 
 export default function NotFound() {
   return (

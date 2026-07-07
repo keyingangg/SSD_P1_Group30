@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import AdminLayout from "../../components/admin/AdminLayout.jsx";
+import AdminLayout from "../admin-layout/AdminLayout.jsx";
 import { getAuditLog } from "../../api/auth.js";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { useWebSocket } from "../../hooks/useWebSocket.js";

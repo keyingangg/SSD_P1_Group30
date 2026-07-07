@@ -20,7 +20,7 @@ import traceback as _traceback
 
 from django.utils import timezone
 
-from .models import AuditLog
+from ..data.models import AuditLog
 
 
 SENSITIVE_KEYS = {

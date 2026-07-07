@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 
-import AdminLayout from "../../components/admin/AdminLayout.jsx";
+import AdminLayout from "../admin-layout/AdminLayout.jsx";
 import { getListings } from "../../api/auctions.js";
 import { useBidFeed } from "../../hooks/useBidFeed.js";
-import { timeAgo } from "../../components/BidFeed.jsx";
+import { timeAgo } from "../bid/BidFeed.jsx";
 import { useWebSocket } from "../../hooks/useWebSocket.js";
 
 const SGD = (n) =>

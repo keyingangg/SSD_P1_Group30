@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
-import AuthLayout from "../components/auth/AuthLayout.jsx";
-import { BRAND } from "../config/brand.js";
-import { requestPasswordReset } from "../api/auth.js";
+import AuthLayout from "../auth/AuthLayout.jsx";
+import { BRAND } from "../../config/brand.js";
+import { requestPasswordReset } from "../../api/auth.js";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");

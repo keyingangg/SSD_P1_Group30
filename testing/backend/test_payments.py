@@ -1,7 +1,7 @@
 """Feature tests for the payments / checkout flow.
 
 Covers the security-critical behaviour of the checkout endpoints in
-backend/payments/views.py:
+backend/payments/services/views.py:
   * PaymentIntent creation with IDOR protection (winner-only)
   * Direct payment confirmation (server-verified, never trusts the client)
   * Order detail access scoping (winner or admin only)
@@ -11,7 +11,7 @@ backend/payments/views.py:
 
 Stripe runs in demo/mock mode here — the test settings leave STRIPE_SECRET_KEY
 blank, so stripe_client returns clearly-marked mock responses (see
-backend/payments/stripe_client.py) and no real network calls are made.
+backend/payments/business/stripe_client.py) and no real network calls are made.
 """
 import json
 import uuid
@@ -111,7 +111,7 @@ def test_create_payment_intent_winner_succeeds(auth_client, verified_user):
         "currency": "sgd",
         "demo": True,
     }
-    with patch("payments.stripe_client.create_payment_intent", return_value=fake_intent):
+    with patch("payments.business.stripe_client.create_payment_intent", return_value=fake_intent):
         resp = auth_client.post(
             CREATE_INTENT_URL, {"order_id": str(order.id)}, format="json"
         )
@@ -200,7 +200,7 @@ def test_confirm_payment_winner_marks_order_paid(auth_client, verified_user):
         "metadata": {"order_id": str(order.id)},
         "demo": False,
     }
-    with patch("payments.stripe_client.retrieve_payment_intent", return_value=fake_intent):
+    with patch("payments.business.stripe_client.retrieve_payment_intent", return_value=fake_intent):
         resp = auth_client.post(
             url, {"payment_intent_id": "pi_test_123"}, format="json"
         )
@@ -264,7 +264,7 @@ def test_confirm_payment_rejects_mismatched_payment_intent(auth_client, verified
         "metadata": {"order_id": str(uuid.uuid4())},
         "demo": False,
     }
-    with patch("payments.stripe_client.retrieve_payment_intent", return_value=fake_intent):
+    with patch("payments.business.stripe_client.retrieve_payment_intent", return_value=fake_intent):
         resp = auth_client.post(
             url, {"payment_intent_id": "pi_wrong_order"}, format="json"
         )
@@ -428,7 +428,7 @@ def test_webhook_rejects_invalid_signature(client):
 
 
 @pytest.mark.django_db
-@patch("payments.stripe_client.construct_webhook_event")
+@patch("payments.business.stripe_client.construct_webhook_event")
 def test_webhook_marks_order_paid_on_success(mock_verify, client, verified_user):
     """A verified payment_intent.succeeded event marks the matching order paid."""
     order = _make_order(verified_user, payment_intent_id="pi_hook_success")
@@ -458,7 +458,7 @@ def test_webhook_marks_order_paid_on_success(mock_verify, client, verified_user)
 
 
 @pytest.mark.django_db
-@patch("payments.stripe_client.construct_webhook_event")
+@patch("payments.business.stripe_client.construct_webhook_event")
 def test_webhook_halts_on_winner_mismatch(mock_verify, client, verified_user):
     """If the event's winner metadata doesn't match the order, do NOT mark paid."""
     order = _make_order(verified_user, payment_intent_id="pi_hook_mismatch")
@@ -488,7 +488,7 @@ def test_webhook_halts_on_winner_mismatch(mock_verify, client, verified_user):
 
 
 @pytest.mark.django_db
-@patch("payments.stripe_client.construct_webhook_event")
+@patch("payments.business.stripe_client.construct_webhook_event")
 def test_webhook_ignores_unknown_payment_intent(mock_verify, client):
     """An event for a payment_intent with no matching order is a no-op, not an error."""
     payload = {
@@ -507,7 +507,7 @@ def test_webhook_ignores_unknown_payment_intent(mock_verify, client):
 
 
 @pytest.mark.django_db
-@patch("payments.stripe_client.construct_webhook_event")
+@patch("payments.business.stripe_client.construct_webhook_event")
 def test_webhook_payment_failed_does_not_mark_paid(mock_verify, client, verified_user):
     order = _make_order(verified_user, payment_intent_id="pi_hook_failed")
     payload = {

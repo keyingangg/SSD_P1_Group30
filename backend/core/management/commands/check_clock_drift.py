@@ -24,8 +24,8 @@ import ntplib
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
-from core.alerts import send_security_alert
-from core.audit import log_action
+from core.cross_cutting.alerts import send_security_alert
+from core.cross_cutting.audit import log_action
 
 
 class Command(BaseCommand):

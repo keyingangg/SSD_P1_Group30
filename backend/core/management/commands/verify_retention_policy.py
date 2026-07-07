@@ -13,8 +13,8 @@ than deleting/archiving anything, so it's safe to run on any schedule
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from core.audit import PAYMENT_ACTIONS
-from core.models import AuditLog
+from core.cross_cutting.audit import PAYMENT_ACTIONS
+from core.data.models import AuditLog
 
 AUDIT_LOG_FLOOR_YEARS = 3
 PAYMENT_LOG_FLOOR_YEARS = 5
