@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 
 import AdminUsers from "./AdminUsers.jsx";
 import { useAuth } from "../../context/AuthContext.jsx";
@@ -41,7 +42,11 @@ const SAMPLE_USERS = [
 function setup(currentUser, users = SAMPLE_USERS) {
   useAuth.mockReturnValue({ user: currentUser });
   authApi.getAdminUsers.mockResolvedValue(users);
-  return render(<AdminUsers />);
+  return render(
+    <MemoryRouter>
+      <AdminUsers />
+    </MemoryRouter>
+  );
 }
 
 describe("AdminUsers — role management UI gating", () => {
@@ -53,13 +58,13 @@ describe("AdminUsers — role management UI gating", () => {
 
   it("shows the Invite Staff panel for a superuser", async () => {
     setup(SUPERUSER);
-    expect(await screen.findByText("Invite Staff Member")).toBeInTheDocument();
+    expect(await screen.findByText("Invite Staff")).toBeInTheDocument();
   });
 
   it("hides the Invite Staff panel for a plain staff account", async () => {
     setup(PLAIN_STAFF);
     await screen.findByText("bidder@example.com");
-    expect(screen.queryByText("Invite Staff Member")).not.toBeInTheDocument();
+    expect(screen.queryByText("Invite Staff")).not.toBeInTheDocument();
   });
 
   it("shows Promote only on Bidder rows, for a superuser viewer", async () => {

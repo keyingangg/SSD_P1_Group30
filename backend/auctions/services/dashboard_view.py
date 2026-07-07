@@ -8,6 +8,7 @@ from accounts.services.permissions import IsEmailVerifiedSilent
 
 from ..business.listing_service import finalize_ended_auctions
 from ..data.models import Bid, Listing
+from .serializers import _image_signed_url
 
 
 class UserDashboardView(APIView):
@@ -95,6 +96,7 @@ class UserDashboardView(APIView):
                 "listing_id": listing.id,
                 "title": listing.title,
                 "image_key": listing.image_key,
+                "image_url": _image_signed_url(listing.image_key),
                 "ends_at": listing.ends_at,
                 "current_highest_bid": listing.current_highest_bid,
                 "user_latest_bid_amount": listing.user_latest_bid_amount,
@@ -114,6 +116,7 @@ class UserDashboardView(APIView):
                     "listing_id": listing.id,
                     "title": listing.title,
                     "image_key": listing.image_key,
+                    "image_url": _image_signed_url(listing.image_key),
                     "ended_at": listing.ends_at,
                     "winning_amount": listing.current_highest_bid,
                     "payment_status": (
