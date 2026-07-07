@@ -347,19 +347,6 @@ export default function Landing() {
             <p className="lp-footer-tag1">Exclusive Auctions for Discerning Collectors</p>
             <p className="lp-footer-tag2">Registered in Singapore · Est. {BRAND.established}</p>
           </div>
-          {[
-            { heading: "Platform", links: ["Browse Auctions", "Private Sales", "How It Works", "Provenance Policy"] },
-            { heading: "Company", links: ["About SecureBid", "Careers", "Press Room", "Contact Us"] },
-            { heading: "Legal", links: ["Terms of Service", "Privacy Policy", "Cookie Policy", "PDPA Compliance"] },
-          ].map((col) => (
-            <div className="lp-footer-col" key={col.heading}>
-              <h5>{col.heading}</h5>
-              <div className="lp-footer-col-rule" />
-              <ul>
-                {col.links.map((l) => <li key={l}><Link to="/register">{l}</Link></li>)}
-              </ul>
-            </div>
-          ))}
         </div>
         <div className="lp-footer-bottom">
           <span>©2024 SecureBid Pte. Ltd. All rights reserved.</span>
