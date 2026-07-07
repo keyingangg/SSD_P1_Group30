@@ -89,12 +89,11 @@ export default function Home() {
     getListings().then(setListings).catch(() => {});
   }, [lastMessage]);
 
-  // Fall back to 5s polling if WebSocket is unavailable
+  // REST polling fallback — ≤5 s when WebSocket is unavailable, 30 s otherwise
   useEffect(() => {
-    if (!usingPoll) return;
     const interval = setInterval(() => {
       getListings().then(setListings).catch(() => {});
-    }, 5000);
+    }, usingPoll ? 5000 : 30000);
     return () => clearInterval(interval);
   }, [usingPoll]);
 
