@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 
 import AdminLayout from "../admin-layout/AdminLayout.jsx";
-import { deleteAdminUser, demoteStaff, getAdminUsers, promoteUser, terminateSessions, toggleUserLock } from "../../api/auth.js";
+import { deleteAdminUser, demoteStaff, getAdminUsers, promoteUser, sendStaffInvite, terminateSessions, toggleUserLock } from "../../api/auth.js";
 import { useAuth } from "../../context/AuthContext.jsx";
+import { useConfirm, useAlert } from "../../context/ConfirmContext.jsx";
+
+const ITEMS_PER_PAGE = 10;
 
 const ROLE_OPTIONS   = ["All", "Superuser", "Staff", "Bidder"];
 const STATUS_OPTIONS = ["All", "Active", "Pending", "Locked"];
@@ -65,18 +67,7 @@ function ActionBtn({ onClick, disabled, children, danger }) {
     <button
       onClick={onClick}
       disabled={disabled}
-      style={{
-        padding: ".25rem .65rem",
-        fontSize: ".72rem",
-        fontWeight: 600,
-        border: `1px solid ${danger ? "var(--danger)" : "rgba(27,26,23,.2)"}`,
-        borderRadius: 0,
-        background: "transparent",
-        color: danger ? "var(--danger)" : "var(--ink)",
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? .4 : 1,
-        transition: "opacity .15s",
-      }}
+      className={`au-action-btn${danger ? " au-action-btn--danger" : ""}`}
     >
       {children}
     </button>
@@ -88,6 +79,8 @@ export default function AdminUsers() {
   // Role management (invite / promote / demote) is restricted to superusers,
   // matching the server-side IsSuperUser permission on those endpoints.
   const isSuperuser = currentUser?.is_superuser;
+  const confirm = useConfirm();
+  const alertModal = useAlert();
 
   // ── User list ──────────────────────────────────────────────────────────────
   const [users, setUsers]     = useState([]);
@@ -101,6 +94,13 @@ export default function AdminUsers() {
   const [search, setSearch]       = useState("");
   const [roleFilter, setRole]     = useState("All");
   const [statusFilter, setStatus] = useState("All");
+  const [page, setPage]           = useState(1);
+
+  // ── Invite staff (inline) ───────────────────────────────────────────────────
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviting, setInviting] = useState(false);
+  const [inviteMsg, setInviteMsg] = useState(null);
 
   // ── Data fetching ──────────────────────────────────────────────────────────
   const loadUsers = useCallback(async (showSpinner = false) => {
@@ -135,7 +135,7 @@ export default function AdminUsers() {
         )
       );
     } catch (err) {
-      alert(err?.response?.data?.detail || "Action failed. Please try again.");
+      alertModal(err?.response?.data?.detail || "Action failed. Please try again.");
     } finally {
       setRowAction((prev) => { const next = { ...prev }; delete next[userId]; return next; });
     }
@@ -143,9 +143,9 @@ export default function AdminUsers() {
 
   // ── Demote handler ─────────────────────────────────────────────────────────
   const handleDemote = async (userId) => {
-    if (!window.confirm(
+    if (!(await confirm(
       "Demote this staff member to a regular user? This removes their admin access and ends their active sessions immediately."
-    )) return;
+    ))) return;
     setRowAction((prev) => ({ ...prev, [userId]: "demoting" }));
     try {
       await demoteStaff(userId);
@@ -153,7 +153,7 @@ export default function AdminUsers() {
         prev.map((u) => (u.id === userId ? { ...u, role: "Bidder" } : u))
       );
     } catch (err) {
-      alert(err?.response?.data?.detail || "Demote failed. Please try again.");
+      alertModal(err?.response?.data?.detail || "Demote failed. Please try again.");
     } finally {
       setRowAction((prev) => { const next = { ...prev }; delete next[userId]; return next; });
     }
@@ -161,9 +161,9 @@ export default function AdminUsers() {
 
   // ── Promote handler ────────────────────────────────────────────────────────
   const handlePromote = async (userId) => {
-    if (!window.confirm(
+    if (!(await confirm(
       "Promote this user to a staff member? They will gain admin access and be signed out to refresh their session."
-    )) return;
+    ))) return;
     setRowAction((prev) => ({ ...prev, [userId]: "promoting" }));
     try {
       await promoteUser(userId);
@@ -171,7 +171,7 @@ export default function AdminUsers() {
         prev.map((u) => (u.id === userId ? { ...u, role: "Staff" } : u))
       );
     } catch (err) {
-      alert(err?.response?.data?.detail || "Promote failed. Please try again.");
+      alertModal(err?.response?.data?.detail || "Promote failed. Please try again.");
     } finally {
       setRowAction((prev) => { const next = { ...prev }; delete next[userId]; return next; });
     }
@@ -179,14 +179,14 @@ export default function AdminUsers() {
 
   // ── Terminate sessions handler ─────────────────────────────────────────────
   const handleTerminate = async (userId) => {
-    if (!window.confirm(
+    if (!(await confirm(
       "End all active sessions for this user? They will be signed out immediately and must log in again."
-    )) return;
+    ))) return;
     setRowAction((prev) => ({ ...prev, [userId]: "terminating" }));
     try {
       await terminateSessions(userId);
     } catch (err) {
-      alert(err?.response?.data?.detail || "Failed to end sessions. Please try again.");
+      alertModal(err?.response?.data?.detail || "Failed to end sessions. Please try again.");
     } finally {
       setRowAction((prev) => { const next = { ...prev }; delete next[userId]; return next; });
     }
@@ -194,14 +194,37 @@ export default function AdminUsers() {
 
   // ── Delete handler ─────────────────────────────────────────────────────────
   const handleDelete = async (userId) => {
+    if (!(await confirm(
+      "Delete this user? This permanently removes their account and cannot be undone.",
+      { danger: true, confirmLabel: "Delete" }
+    ))) return;
     setRowAction((prev) => ({ ...prev, [userId]: "deleting" }));
     try {
       await deleteAdminUser(userId);
       setUsers((prev) => prev.filter((u) => u.id !== userId));
     } catch (err) {
-      alert(err?.response?.data?.detail || "Delete failed. Please try again.");
+      alertModal(err?.response?.data?.detail || "Delete failed. Please try again.");
     } finally {
       setRowAction((prev) => { const next = { ...prev }; delete next[userId]; return next; });
+    }
+  };
+
+  // ── Invite handler ─────────────────────────────────────────────────────────
+  const handleInvite = async (e) => {
+    e.preventDefault();
+    setInviteMsg(null);
+    setInviting(true);
+    try {
+      const data = await sendStaffInvite(inviteEmail);
+      setInviteMsg({ type: "success", text: data.detail });
+      setInviteEmail("");
+    } catch (err) {
+      setInviteMsg({
+        type: "error",
+        text: err?.response?.data?.detail || "Failed to send invitation. Please try again.",
+      });
+    } finally {
+      setInviting(false);
     }
   };
 
@@ -218,57 +241,102 @@ export default function AdminUsers() {
 
   const hasFilters = search || roleFilter !== "All" || statusFilter !== "All";
 
+  // Reset to page 1 whenever the filtered set changes
+  useEffect(() => { setPage(1); }, [search, roleFilter, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+  const paged = filtered.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <AdminLayout>
       <p className="admin-eyebrow">SecureBid Admin Panel</p>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: ".75rem" }}>
         <h1 className="admin-page-title">Users</h1>
-        {isSuperuser && (
-          <Link to="/admin/invite-staff" className="admin-alert-btn" style={{ padding: ".57rem 1.25rem", textDecoration: "none" }}>
-            Invite Staff
-          </Link>
+        {isSuperuser && !showInvite && (
+          <button
+            type="button"
+            className="au-invite-toggle"
+            onClick={() => setShowInvite(true)}
+          >
+            + Invite Staff
+          </button>
         )}
       </div>
 
-      {/* User list */}
-      <div className="admin-panel">
-        <div className="admin-panel-header">
-          <span className="admin-panel-title">All Accounts</span>
-          <span className="admin-panel-sub">
-            {loading ? "Loading…" : `${filtered.length} of ${users.length} user${users.length !== 1 ? "s" : ""}`}
-          </span>
+      {isSuperuser && showInvite && (
+        <div className="au-invite-panel">
+          <button
+            type="button"
+            className="au-invite-close"
+            onClick={() => setShowInvite(false)}
+            aria-label="Close invite panel"
+          >
+            ×
+          </button>
+          <div className="au-invite-icon">✉</div>
+          <div className="au-invite-copy">
+            <p className="cf-eyebrow" style={{ margin: "0 0 .2rem" }}>Invite Staff Member</p>
+            <p className="au-invite-sub">An email invite will be sent — the invitee sets their own password.</p>
+          </div>
+          <form onSubmit={handleInvite} className="au-invite-form">
+            <input
+              type="email"
+              placeholder="colleague@example.com"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              required
+              className="au-invite-input"
+            />
+            <button
+              type="submit"
+              disabled={inviting || !inviteEmail}
+              className="au-invite-submit"
+            >
+              {inviting ? "Sending…" : "Send Invite"}
+            </button>
+          </form>
+          {inviteMsg && (
+            <p className={`au-invite-msg${inviteMsg.type === "success" ? " au-invite-msg--ok" : " au-invite-msg--err"}`}>
+              {inviteMsg.text}
+            </p>
+          )}
         </div>
+      )}
 
-        {/* Filter bar */}
-        <div style={{
-          padding: ".9rem 1.25rem",
-          borderBottom: "1px solid rgba(27,26,23,.08)",
-          display: "flex", gap: ".6rem", flexWrap: "wrap", alignItems: "center",
-        }}>
+      {/* Filter bar */}
+      <div className="au-filter-bar">
+        <div className="au-search-wrap">
+          <svg className="au-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
           <input
             type="text"
             placeholder="Search by name or email…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={{ ...inputStyle, minWidth: 220, flex: 1 }}
+            className="au-search-input"
           />
-          <select value={roleFilter} onChange={(e) => setRole(e.target.value)} style={inputStyle}>
-            {ROLE_OPTIONS.map((r) => <option key={r}>{r}</option>)}
-          </select>
-          <select value={statusFilter} onChange={(e) => setStatus(e.target.value)} style={inputStyle}>
-            {STATUS_OPTIONS.map((s) => <option key={s}>{s}</option>)}
-          </select>
-          {hasFilters && (
-            <button
-              onClick={() => { setSearch(""); setRole("All"); setStatus("All"); }}
-              style={{ ...inputStyle, cursor: "pointer", background: "transparent", color: "var(--gold-dark)", borderColor: "var(--gold-dark)", whiteSpace: "nowrap" }}
-            >
-              Clear filters
-            </button>
-          )}
         </div>
+        <select value={roleFilter} onChange={(e) => setRole(e.target.value)} style={inputStyle}>
+          {ROLE_OPTIONS.map((r) => <option key={r}>{r}</option>)}
+        </select>
+        <select value={statusFilter} onChange={(e) => setStatus(e.target.value)} style={inputStyle}>
+          {STATUS_OPTIONS.map((s) => <option key={s}>{s}</option>)}
+        </select>
+        {hasFilters && (
+          <button
+            onClick={() => { setSearch(""); setRole("All"); setStatus("All"); }}
+            style={{ ...inputStyle, cursor: "pointer", background: "transparent", color: "var(--gold-dark)", borderColor: "var(--gold-dark)", whiteSpace: "nowrap" }}
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
 
+      {/* User list */}
+      <div className="admin-panel">
         {/* Table */}
         {fetchErr ? (
           <p style={{ padding: "1.5rem 1.25rem", color: "var(--danger)", fontSize: ".85rem" }}>{fetchErr}</p>
@@ -277,7 +345,15 @@ export default function AdminUsers() {
         ) : filtered.length === 0 ? (
           <p style={{ padding: "1.5rem 1.25rem", opacity: .5, fontSize: ".85rem" }}>No users match the current filters.</p>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: ".82rem" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: ".82rem", tableLayout: "fixed" }}>
+            <colgroup>
+              <col style={{ width: "170px" }} />
+              <col />
+              <col style={{ width: "90px" }} />
+              <col style={{ width: "100px" }} />
+              <col style={{ width: "100px" }} />
+              <col style={{ width: "400px" }} />
+            </colgroup>
             <thead>
               <tr style={{ borderBottom: "1px solid rgba(27,26,23,.1)" }}>
                 {["Name", "Email", "Role", "Status", "Joined", "Actions"].map((h) => (
@@ -285,6 +361,7 @@ export default function AdminUsers() {
                     padding: ".6rem 1.25rem", textAlign: "left",
                     fontSize: ".65rem", textTransform: "uppercase",
                     letterSpacing: ".1em", opacity: .45, fontWeight: 600,
+                    whiteSpace: "nowrap",
                   }}>
                     {h}
                   </th>
@@ -292,42 +369,26 @@ export default function AdminUsers() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((u) => {
+              {paged.map((u) => {
                 const busy = rowAction[u.id];
-                const confirmingDelete = busy === "confirm-delete";
                 const isLocked = u.status === "Locked";
                 const isProtected = u.role === "Superuser";
                 const isSelf = u.id === currentUser?.id;
 
                 return (
                   <tr key={u.id} style={{ borderBottom: "1px solid rgba(27,26,23,.06)" }}>
-                    <td style={{ padding: ".7rem 1.25rem", fontWeight: 500 }}>
+                    <td style={{ padding: ".7rem 1.25rem", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                       {u.display_name || <span style={{ opacity: .4 }}>—</span>}
                     </td>
-                    <td style={{ padding: ".7rem 1.25rem", opacity: .65 }}>{u.email}</td>
+                    <td style={{ padding: ".7rem 1.25rem", opacity: .65, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{u.email}</td>
                     <td style={{ padding: ".7rem 1.25rem" }}><Badge role={u.role} /></td>
                     <td style={{ padding: ".7rem 1.25rem" }}><StatusDot status={u.status} /></td>
-                    <td style={{ padding: ".7rem 1.25rem", opacity: .5 }}>{formatDate(u.created_at)}</td>
-                    <td style={{ padding: ".7rem 1.25rem" }}>
+                    <td style={{ padding: ".7rem 1.25rem", opacity: .5, whiteSpace: "nowrap" }}>{formatDate(u.created_at)}</td>
+                    <td style={{ padding: ".7rem 1.25rem", whiteSpace: "nowrap" }}>
                       {isProtected || isSelf ? (
                         <span style={{ fontSize: ".72rem", opacity: .35 }}>{isSelf ? "You" : "Protected"}</span>
-                      ) : confirmingDelete ? (
-                        /* Inline delete confirmation */
-                        <span style={{ display: "inline-flex", gap: ".4rem", alignItems: "center" }}>
-                          <span style={{ fontSize: ".72rem", color: "var(--danger)", fontWeight: 600 }}>Delete?</span>
-                          <ActionBtn
-                            danger
-                            onClick={() => handleDelete(u.id)}
-                            disabled={busy === "deleting"}
-                          >
-                            {busy === "deleting" ? "Deleting…" : "Confirm"}
-                          </ActionBtn>
-                          <ActionBtn onClick={() => setRowAction((prev) => { const next = { ...prev }; delete next[u.id]; return next; })}>
-                            Cancel
-                          </ActionBtn>
-                        </span>
                       ) : (
-                        <span style={{ display: "inline-flex", gap: ".4rem" }}>
+                        <span className="au-action-group">
                           <ActionBtn
                             onClick={() => handleToggleLock(u.id)}
                             disabled={!!busy}
@@ -358,10 +419,10 @@ export default function AdminUsers() {
                           </ActionBtn>
                           <ActionBtn
                             danger
-                            onClick={() => setRowAction((prev) => ({ ...prev, [u.id]: "confirm-delete" }))}
+                            onClick={() => handleDelete(u.id)}
                             disabled={!!busy}
                           >
-                            Delete
+                            {busy === "deleting" ? "Deleting…" : "Delete"}
                           </ActionBtn>
                         </span>
                       )}
@@ -373,6 +434,30 @@ export default function AdminUsers() {
           </table>
         )}
       </div>
+
+      {!loading && !fetchErr && filtered.length > 0 && totalPages > 1 && (
+        <div className="au-pagination">
+          <button
+            type="button"
+            className="au-page-btn"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+          >
+            ← Prev
+          </button>
+          <span className="au-page-info">
+            Page {page} of {totalPages}
+          </span>
+          <button
+            type="button"
+            className="au-page-btn"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+          >
+            Next →
+          </button>
+        </div>
+      )}
     </AdminLayout>
   );
 }

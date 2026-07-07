@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import AdminLayout from "../admin-layout/AdminLayout.jsx";
 import { getAdminOrders, updateFulfillmentStatus } from "../../api/payments.js";
+import { useConfirm, useAlert } from "../../context/ConfirmContext.jsx";
 
 function fmtSGD(cents) {
   const n = Number(cents) / 100;
@@ -73,6 +74,8 @@ export default function AdminOrders() {
   const [error, setError] = useState("");
   const [tab, setTab] = useState("All Orders");
   const [updating, setUpdating] = useState(null);
+  const confirm = useConfirm();
+  const alertModal = useAlert();
 
   const load = async () => {
     setLoading(true);
@@ -92,7 +95,7 @@ export default function AdminOrders() {
     const next = FULFILLMENT_TRANSITIONS[order.fulfillment_status];
     if (!next) return;
     const nextLabel = NEXT_LABEL[next] || next;
-    if (!window.confirm(`Advance order ${order.order_ref} to "${nextLabel}"?\n\nThis action cannot be reversed.`)) return;
+    if (!(await confirm(`Advance order ${order.order_ref} to "${nextLabel}"?\n\nThis action cannot be reversed.`))) return;
     setUpdating(order.id);
     try {
       await updateFulfillmentStatus(order.id, next);
@@ -100,7 +103,7 @@ export default function AdminOrders() {
         prev.map((o) => o.id === order.id ? { ...o, fulfillment_status: next } : o)
       );
     } catch (err) {
-      alert(err?.response?.data?.detail || "Could not update status.");
+      alertModal(err?.response?.data?.detail || "Could not update status.");
     } finally {
       setUpdating(null);
     }
@@ -304,25 +307,10 @@ export default function AdminOrders() {
                     <td style={{ textAlign: "right" }}>
                       {canAdvance ? (
                         <button
+                          className="al-btn"
                           onClick={() => handleAdvance(order)}
                           disabled={isUpdating}
-                          style={{
-                            padding: "5px 14px",
-                            fontSize: "12px",
-                            fontWeight: 600,
-                            border: "1px solid rgba(27,26,23,0.22)",
-                            borderRadius: 0,
-                            background: isUpdating ? "rgba(27,26,23,0.05)" : "transparent",
-                            color: "var(--ink)",
-                            cursor: isUpdating ? "not-allowed" : "pointer",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "5px",
-                            transition: "background 0.12s",
-                            whiteSpace: "nowrap",
-                          }}
-                          onMouseOver={(e) => !isUpdating && (e.currentTarget.style.background = "rgba(27,26,23,0.06)")}
-                          onMouseOut={(e) => (e.currentTarget.style.background = isUpdating ? "rgba(27,26,23,0.05)" : "transparent")}
+                          style={{ whiteSpace: "nowrap" }}
                         >
                           {isUpdating ? "Updating…" : `${NEXT_LABEL[nextStatus]} ▾`}
                         </button>

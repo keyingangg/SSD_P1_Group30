@@ -71,13 +71,6 @@ export default function Landing() {
             <span className="lp-logo-est">EST. {BRAND.established}</span>
           </span>
         </div>
-        <nav className="lp-nav-links">
-          <Link to="/register" className="lp-nl">Auctions</Link>
-          <Link to="/register" className="lp-nl">Private Sales</Link>
-          <Link to="/register" className="lp-nl">Jewellery</Link>
-          <Link to="/register" className="lp-nl">Watches</Link>
-          <Link to="/register" className="lp-nl">About</Link>
-        </nav>
         <div className="lp-nav-actions">
           <Link to="/login" className="lp-nl">Sign In</Link>
           <Link to="/register" className="lp-nav-register">Register</Link>

@@ -1,0 +1,146 @@
+@keyframes cf-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes cf-pop-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.cf-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(27, 26, 23, 0.5);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: cf-fade-in 0.15s ease-out;
+}
+
+.cf-dialog {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  margin: 0 16px;
+  background: var(--bg, #f4f1ea);
+  border: 1px solid var(--line, #d6d2c7);
+  border-radius: var(--radius, 8px);
+  padding: 32px 28px 24px;
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(27, 26, 23, 0.3);
+  animation: cf-pop-in 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cf-dialog::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 48px;
+  height: 3px;
+  background: linear-gradient(90deg, var(--gold, #c2a15a), var(--gold-dark, #a6863f));
+  border-radius: 0 0 3px 3px;
+}
+
+.cf-dialog--danger::before {
+  background: var(--danger, #b4452f);
+}
+
+.cf-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  margin: 4px auto 16px;
+  border-radius: 50%;
+  background: rgba(194, 161, 90, 0.14);
+  border: 1.5px solid var(--gold, #c2a15a);
+  color: var(--gold-dark, #a6863f);
+  font-family: var(--font-serif, Georgia, serif);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.cf-dialog--danger .cf-icon {
+  background: rgba(180, 69, 47, 0.1);
+  border-color: var(--danger, #b4452f);
+  color: var(--danger, #b4452f);
+}
+
+.cf-eyebrow {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gold-dark, #a6863f);
+}
+
+.cf-dialog--danger .cf-eyebrow {
+  color: var(--danger, #b4452f);
+}
+
+.cf-message {
+  margin: 0 0 22px;
+  color: var(--ink, #1b1a17);
+  font-family: var(--font-serif, Georgia, serif);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: pre-line;
+}
+
+.cf-divider {
+  height: 1px;
+  background: var(--line, #d6d2c7);
+  margin: 0 -28px 20px;
+}
+
+.cf-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.cf-btn {
+  flex: 1;
+  padding: 11px 18px;
+  font-family: var(--font-sans, inherit);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: var(--radius, 8px);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+
+.cf-btn--cancel {
+  background: transparent;
+  border: 1px solid var(--line, #d6d2c7);
+  color: var(--ink-soft, #4a4843);
+}
+.cf-btn--cancel:hover {
+  background: rgba(27, 26, 23, 0.04);
+  border-color: var(--ink-soft, #4a4843);
+}
+
+.cf-btn--confirm {
+  border: none;
+  color: #fff;
+  background: var(--gold, #c2a15a);
+}
+.cf-btn--confirm:hover {
+  background: var(--gold-dark, #a6863f);
+}
+
+.cf-btn--danger {
+  background: var(--danger, #b4452f);
+}
+.cf-btn--danger:hover {
+  background: #942d1a;
+}

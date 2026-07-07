@@ -21,7 +21,6 @@ import AdminLiveMonitor from "./presentation/live-monitor/AdminLiveMonitor.jsx";
 import AdminListings from "./presentation/listings/AdminListings.jsx";
 import AdminCreate from "./presentation/listings/AdminCreate.jsx";
 import AdminUsers from "./presentation/users/AdminUsers.jsx";
-import AdminInviteStaff from "./presentation/staff-invite/AdminInviteStaff.jsx";
 import AdminOrders from "./presentation/orders/AdminOrders.jsx";
 import AdminAuditLog from "./presentation/audit-log/AdminAuditLog.jsx";
 import NotFound from "./presentation/common/NotFound.jsx";
@@ -124,14 +123,6 @@ export default function App() {
           element={
             <ProtectedRoute requireAdmin>
               <AdminUsers />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/invite-staff"
-          element={
-            <ProtectedRoute requireAdmin>
-              <AdminInviteStaff />
             </ProtectedRoute>
           }
         />

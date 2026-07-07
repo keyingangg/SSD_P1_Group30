@@ -52,7 +52,7 @@ class ListingListView(APIView):
 
         now = timezone.now()
         finalize_and_activate_listings(now=now)
-        queryset = search_listings(params, request.user.is_staff)
+        queryset = search_listings(params, request.user.is_staff, request.user.is_authenticated)
 
         serializer = ListingSerializer(queryset, many=True)
         return Response(serializer.data)
@@ -81,7 +81,7 @@ class ListingDetailView(APIView):
         except Listing.DoesNotExist:
             return Response({"detail": "Listing not found."}, status=404)
 
-        if not is_visible_to(listing, request.user.is_staff):
+        if not is_visible_to(listing, request.user.is_staff, request.user.is_authenticated):
             log_action(
                 user=request.user if getattr(request.user, "is_authenticated", False) else None,
                 action="listing_access_denied",

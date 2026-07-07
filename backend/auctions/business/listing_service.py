@@ -24,11 +24,14 @@ def finalize_and_activate_listings(now=None):
     ).update(status="active")
 
 
-def search_listings(params, is_staff):
+def search_listings(params, is_staff, is_authenticated=False):
     """Build the filtered, ordered queryset for the public listing browse API."""
     queryset = Listing.objects.annotate(_bid_count=Count("bids"))
     if not is_staff:
-        queryset = queryset.exclude(status__in=["draft", "cancelled", "scheduled"])
+        excluded_statuses = ["draft", "cancelled"]
+        if not is_authenticated:
+            excluded_statuses.append("scheduled")
+        queryset = queryset.exclude(status__in=excluded_statuses)
 
     if params.get("q"):
         queryset = queryset.filter(title__icontains=params["q"])
@@ -43,6 +46,17 @@ def search_listings(params, is_staff):
     return queryset.order_by(params.get("ordering", "-starts_at"))
 
 
-def is_visible_to(listing, is_staff):
-    """Whether a non-public-status listing may be viewed by this caller."""
-    return is_staff or listing.status not in {"draft", "cancelled", "scheduled"}
+def is_visible_to(listing, is_staff, is_authenticated=False):
+    """Whether a non-public-status listing may be viewed by this caller.
+
+    Cancelled listings stay viewable (read-only) to authenticated users so a
+    bidder who already had the page open sees the "Auction Cancelled" state
+    instead of a 404 -- but anonymous visitors and drafts remain hidden.
+    """
+    if is_staff:
+        return True
+    if listing.status == "draft":
+        return False
+    if not is_authenticated:
+        return listing.status not in {"cancelled", "scheduled"}
+    return True

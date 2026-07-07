@@ -680,16 +680,26 @@
 .al-locked-note { font-size: .68rem; opacity: .5; white-space: nowrap; }
 .al-action-btns { display: flex; gap: .4rem; flex-wrap: wrap; }
 .al-btn {
-  padding: .35rem .75rem;
-  font-size: .78rem; font-weight: 500;
-  border: 1px solid rgba(27,26,23,.22);
-  border-radius: 0; background: transparent;
-  color: var(--ink); cursor: pointer;
-  transition: background .12s;
+  padding: .4rem .85rem;
+  font-family: var(--font-sans);
+  font-size: .78rem; font-weight: 600;
+  letter-spacing: .01em;
+  border: 1px solid var(--line);
+  border-radius: var(--radius); background: #fff;
+  color: var(--ink-soft); cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
 }
-.al-btn:hover { background: rgba(27,26,23,.06); }
-.al-btn--danger { border-color: rgba(192,57,43,.35); color: #c0392b; }
-.al-btn--danger:hover { background: rgba(192,57,43,.06); }
+.al-btn:hover:not(:disabled) {
+  border-color: var(--gold);
+  color: var(--gold-dark);
+  background: rgba(194, 161, 90, .08);
+}
+.al-btn:disabled { opacity: .45; cursor: not-allowed; }
+.al-btn--danger { border-color: rgba(180,69,47,.3); color: var(--danger); }
+.al-btn--danger:hover:not(:disabled) {
+  background: rgba(180, 69, 47, .08);
+  border-color: var(--danger);
+}
 
 /* Legend */
 .al-legend {
@@ -1080,4 +1090,264 @@
   padding: 2.5rem 1rem;
   color: rgba(27, 26, 23, .4);
   font-size: .85rem;
+}
+
+/* Admin Users -- filter bar (sits above the panel, matches catalogue filter strip) */
+.au-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  flex-wrap: wrap;
+  margin: 1.25rem 0 1rem;
+}
+/* Admin Users -- pagination */
+.au-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  margin-top: 1.25rem;
+}
+.au-page-btn {
+  padding: .45rem 1rem;
+  font-family: var(--font-sans);
+  font-size: .74rem;
+  font-weight: 600;
+  letter-spacing: .01em;
+  color: var(--ink-soft);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.au-page-btn:hover:not(:disabled) {
+  border-color: var(--gold);
+  color: var(--gold-dark);
+  background: rgba(194, 161, 90, .08);
+}
+.au-page-btn:disabled {
+  opacity: .35;
+  cursor: not-allowed;
+}
+.au-page-info {
+  font-size: .78rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Admin Users -- search bar (matches catalogue search) */
+.au-search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 220px;
+  flex: 1;
+  height: 38px;
+  padding: 0 2px;
+  border-bottom: 1.5px solid rgba(27, 26, 23, .22);
+  transition: border-color .15s;
+}
+.au-search-wrap:focus-within {
+  border-bottom-color: var(--gold);
+}
+.au-search-icon {
+  flex-shrink: 0;
+  color: var(--ink);
+  opacity: .4;
+}
+.au-search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: .82rem;
+  color: var(--ink);
+  outline: none;
+  letter-spacing: 0.2px;
+}
+.au-search-input::placeholder {
+  color: var(--muted);
+}
+
+/* Admin Users -- invite staff toggle + panel */
+.au-invite-toggle {
+  padding: .55rem 1.15rem;
+  font-family: var(--font-sans);
+  font-size: .78rem;
+  font-weight: 600;
+  letter-spacing: .01em;
+  color: var(--gold-dark);
+  background: rgba(194, 161, 90, .08);
+  border: 1px solid var(--gold);
+  border-radius: var(--radius);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s, color .15s;
+}
+.au-invite-toggle:hover {
+  background: var(--gold);
+  color: #fff;
+}
+.au-invite-panel {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin: 1rem 0 0;
+  padding: 1.35rem 2.75rem 1.35rem 1.5rem;
+  background: var(--panel, #fff);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.au-invite-close {
+  position: absolute;
+  top: .6rem;
+  right: .6rem;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.au-invite-close:hover {
+  background: rgba(180, 69, 47, .1);
+  color: var(--danger);
+}
+.au-invite-panel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--gold), var(--gold-dark));
+}
+.au-invite-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: rgba(194, 161, 90, .14);
+  border: 1.5px solid var(--gold);
+  color: var(--gold-dark);
+  font-size: 18px;
+}
+.au-invite-copy {
+  flex: 1 1 220px;
+  min-width: 200px;
+}
+.au-invite-sub {
+  margin: 0;
+  font-size: .78rem;
+  color: var(--muted);
+}
+.au-invite-form {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  flex: 1 1 320px;
+  flex-wrap: wrap;
+}
+.au-invite-input {
+  flex: 1;
+  min-width: 220px;
+  height: 38px;
+  padding: 0 2px;
+  border: none;
+  border-bottom: 1.5px solid rgba(27, 26, 23, .22);
+  background: transparent;
+  font-family: var(--font-sans);
+  font-size: .82rem;
+  color: var(--ink);
+  outline: none;
+  transition: border-color .15s;
+}
+.au-invite-input:focus {
+  border-bottom-color: var(--gold);
+}
+.au-invite-input::placeholder {
+  color: var(--muted);
+}
+.au-invite-submit {
+  padding: .55rem 1.25rem;
+  font-family: var(--font-sans);
+  font-size: .78rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--gold);
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s;
+}
+.au-invite-submit:hover:not(:disabled) {
+  background: var(--gold-dark);
+}
+.au-invite-submit:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+.au-invite-msg {
+  width: 100%;
+  margin: .75rem 0 0;
+  font-size: .8rem;
+}
+.au-invite-msg--ok { color: var(--green); }
+.au-invite-msg--err { color: var(--danger); }
+
+/* â”€â”€ Admin Users â€” row action buttons â”€â”€ */
+.au-action-group {
+  display: inline-flex;
+  gap: .45rem;
+  flex-wrap: nowrap;
+}
+
+.au-action-btn {
+  padding: .4rem .85rem;
+  font-family: var(--font-sans);
+  font-size: .74rem;
+  font-weight: 600;
+  letter-spacing: .01em;
+  color: var(--ink-soft);
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s, box-shadow .15s;
+}
+
+.au-action-btn:hover:not(:disabled) {
+  border-color: var(--gold);
+  color: var(--gold-dark);
+  background: rgba(194, 161, 90, .08);
+}
+
+.au-action-btn:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.au-action-btn--danger {
+  color: var(--danger);
+  border-color: rgba(180, 69, 47, .3);
+}
+
+.au-action-btn--danger:hover:not(:disabled) {
+  background: rgba(180, 69, 47, .08);
+  border-color: var(--danger);
 }

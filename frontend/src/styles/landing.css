@@ -84,6 +84,7 @@
 .lp-nl:hover { color: var(--lp-gold-t); text-decoration: none; }
 .lp-nav-actions {
   display: flex; align-items: center; gap: 0;
+  margin-left: auto;
 }
 .lp-nav-actions .lp-nl { padding: 0 48px 0 0; letter-spacing: 0.5px; }
 .lp-nav-register {

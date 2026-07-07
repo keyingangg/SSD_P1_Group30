@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 import { getUserDashboard } from "../../api/auctions.js";
 import { useAuth } from "../../context/AuthContext.jsx";
@@ -65,6 +65,7 @@ const TABS = ["Overview", "Active Bids", "Won Auctions", "Order Status"];
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const location = useLocation();
   const [data, setData] = useState({
     active_bids: [],
     won_auctions: [],
@@ -73,7 +74,10 @@ export default function Dashboard() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState(0);
+  const [activeTab, setActiveTab] = useState(() => {
+    const requested = TABS.indexOf(location.state?.tab);
+    return requested >= 0 ? requested : 0;
+  });
 
   const { lastMessage, usingPoll } = useWebSocket("/ws/catalogue/");
 

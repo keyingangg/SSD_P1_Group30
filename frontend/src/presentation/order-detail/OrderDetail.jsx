@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { getOrderDetail } from "../../api/payments.js";
+import { useAuth } from "../../context/AuthContext.jsx";
 
 function formatMoney(cents, currency) {
   const value = Number(cents) / 100;
@@ -60,6 +61,10 @@ function stepStatus(stepKey, currentStatus) {
 
 export default function OrderDetail() {
   const { orderId } = useParams();
+  const { user } = useAuth();
+  const isStaff = user?.is_staff === true;
+  const ordersBackTo = isStaff ? "/admin/orders" : "/dashboard";
+  const ordersBackState = isStaff ? undefined : { tab: "Order Status" };
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -93,7 +98,7 @@ export default function OrderDetail() {
     return (
       <main style={{ maxWidth: 1000, margin: "3rem auto", padding: "0 1.5rem" }}>
         <p className="form-error">{error || "Order not found."}</p>
-        <Link to="/dashboard" className="link-gold">← Back to dashboard</Link>
+        <Link to={ordersBackTo} state={ordersBackState} className="link-gold">← Back to Orders</Link>
       </main>
     );
   }
@@ -109,9 +114,15 @@ export default function OrderDetail() {
 
       {/* Breadcrumb */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "12px", color: "var(--muted)", marginBottom: "1.25rem" }}>
-        <Link to="/dashboard" style={{ color: "var(--muted)", textDecoration: "none" }}>Dashboard</Link>
-        <span>›</span>
-        <Link to="/dashboard" style={{ color: "var(--muted)", textDecoration: "none" }}>Won Auctions</Link>
+        {isStaff ? (
+          <Link to="/admin/orders" style={{ color: "var(--muted)", textDecoration: "none" }}>Orders</Link>
+        ) : (
+          <>
+            <Link to="/dashboard" style={{ color: "var(--muted)", textDecoration: "none" }}>Dashboard</Link>
+            <span>›</span>
+            <Link to="/dashboard" state={{ tab: "Won Auctions" }} style={{ color: "var(--muted)", textDecoration: "none" }}>Won Auctions</Link>
+          </>
+        )}
         <span>›</span>
         <span style={{ color: "var(--ink)" }}>Order {orderRef}</span>
       </div>
@@ -243,8 +254,8 @@ export default function OrderDetail() {
             </>
           )}
 
-          <Link to="/dashboard" style={{ fontSize: "12px", color: "var(--gold-dark)", textDecoration: "none" }}>
-            ← Back to dashboard
+          <Link to={ordersBackTo} state={ordersBackState} style={{ fontSize: "12px", color: "var(--gold-dark)", textDecoration: "none" }}>
+            ← Back to Orders
           </Link>
         </div>
 

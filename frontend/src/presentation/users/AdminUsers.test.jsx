@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 
 import AdminUsers from "./AdminUsers.jsx";
 import { useAuth } from "../../context/AuthContext.jsx";
+import { ConfirmProvider } from "../../context/ConfirmContext.jsx";
 import * as authApi from "../../api/auth.js";
 
 vi.mock("../../context/AuthContext.jsx", () => ({
@@ -44,7 +45,9 @@ function setup(currentUser, users = SAMPLE_USERS) {
   authApi.getAdminUsers.mockResolvedValue(users);
   return render(
     <MemoryRouter>
-      <AdminUsers />
+      <ConfirmProvider>
+        <AdminUsers />
+      </ConfirmProvider>
     </MemoryRouter>
   );
 }
@@ -58,7 +61,7 @@ describe("AdminUsers — role management UI gating", () => {
 
   it("shows the Invite Staff panel for a superuser", async () => {
     setup(SUPERUSER);
-    expect(await screen.findByText("Invite Staff")).toBeInTheDocument();
+    expect(await screen.findByText("+ Invite Staff")).toBeInTheDocument();
   });
 
   it("hides the Invite Staff panel for a plain staff account", async () => {
@@ -155,9 +158,12 @@ describe("AdminUsers — Delete two-step confirmation", () => {
     const bidderRow = screen.getByText("bidder@example.com").closest("tr");
     await user.click(within(bidderRow).getByText("Delete"));
 
-    expect(within(bidderRow).getByText("Delete?")).toBeInTheDocument();
-    await user.click(within(bidderRow).getByText("Cancel"));
+    const dialog = await screen.findByText(
+      "Delete this user? This permanently removes their account and cannot be undone."
+    );
+    await user.click(screen.getByText("Cancel"));
 
+    expect(dialog).not.toBeInTheDocument();
     expect(authApi.deleteAdminUser).not.toHaveBeenCalled();
     expect(within(bidderRow).getByText("Delete")).toBeInTheDocument();
   });
@@ -170,7 +176,11 @@ describe("AdminUsers — Delete two-step confirmation", () => {
     await screen.findByText("bidder@example.com");
     const bidderRow = screen.getByText("bidder@example.com").closest("tr");
     await user.click(within(bidderRow).getByText("Delete"));
-    await user.click(within(bidderRow).getByText("Confirm"));
+
+    await screen.findByText(
+      "Delete this user? This permanently removes their account and cannot be undone."
+    );
+    await user.click(screen.getByText("Delete", { selector: ".cf-btn--confirm" }));
 
     expect(authApi.deleteAdminUser).toHaveBeenCalledWith("u-bidder");
     expect(screen.queryByText("bidder@example.com")).not.toBeInTheDocument();

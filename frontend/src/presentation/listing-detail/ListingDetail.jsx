@@ -53,6 +53,7 @@ export default function ListingDetail() {
   const refreshListing = useCallback(async () => {
     const data = await getListingDetail(id);
     setListing(data);
+    setError("");
     return data;
   }, [id]);
 
@@ -114,10 +115,10 @@ export default function ListingDetail() {
     }
   }, [lastMessage]);
 
-  // Fallback: poll listing + bids every 5 s when WebSocket is unavailable
+  // Poll listing + bids on a timer — ≤5 s when WebSocket is unavailable, 30 s otherwise
   useEffect(() => {
-    if (!id || !isPolling) return;
-    const interval = setInterval(refreshListing, 5000);
+    if (!id) return;
+    const interval = setInterval(refreshListing, isPolling ? 5000 : 30000);
     return () => clearInterval(interval);
   }, [id, isPolling]);
 

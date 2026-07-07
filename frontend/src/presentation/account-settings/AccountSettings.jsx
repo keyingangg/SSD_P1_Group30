@@ -3,10 +3,12 @@ import { useNavigate } from "react-router-dom";
 
 import { getMFAStatus, startMFAEnrol, confirmMFAEnrol, unenrolMFA, deleteAccount, changePassword } from "../../api/auth.js";
 import { useAuth } from "../../context/AuthContext.jsx";
+import { useConfirm } from "../../context/ConfirmContext.jsx";
 
 export default function AccountSettings() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const confirm = useConfirm();
 
   const [enrolled, setEnrolled] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -75,7 +77,7 @@ export default function AccountSettings() {
   };
 
   const handleUnenrol = async () => {
-    if (!window.confirm("Disable MFA? Your account will only be protected by password.")) return;
+    if (!(await confirm("Disable MFA? Your account will only be protected by password."))) return;
     setMessage(null);
     setSubmitting(true);
     try {
@@ -155,7 +157,7 @@ export default function AccountSettings() {
   };
 
   return (
-    <main style={{ maxWidth: 560, margin: "3rem auto", padding: "0 1.5rem" }}>
+    <main style={{ maxWidth: 560, margin: "3rem auto", padding: "0 1.5rem 3rem" }}>
       <h1 style={{ marginBottom: "2rem" }}>Account Settings</h1>
 
       <section

@@ -155,7 +155,29 @@ def test_scheduled_listing_hidden_from_list_for_non_staff(client, admin_user):
 
 
 @pytest.mark.django_db
-def test_scheduled_listing_detail_returns_404_for_non_staff(auth_client, admin_user):
+def test_scheduled_listing_detail_returns_403_for_anonymous(client, admin_user):
+    now = timezone.now()
+
+    scheduled_listing = Listing.objects.create(
+        created_by=admin_user,
+        title="Scheduled Auction Details",
+        description="Not yet open for bidding",
+        image_key="",
+        category="Others",
+        starting_price="100.00",
+        current_highest_bid="100.00",
+        minimum_increment="5.00",
+        starts_at=now + timedelta(days=1),
+        ends_at=now + timedelta(days=2),
+        status="scheduled",
+    )
+
+    resp = client.get(f"/api/auctions/{scheduled_listing.id}/")
+    assert resp.status_code == 403
+
+
+@pytest.mark.django_db
+def test_scheduled_listing_detail_visible_to_authenticated_non_staff(auth_client, admin_user):
     now = timezone.now()
 
     scheduled_listing = Listing.objects.create(
@@ -173,7 +195,8 @@ def test_scheduled_listing_detail_returns_404_for_non_staff(auth_client, admin_u
     )
 
     resp = auth_client.get(f"/api/auctions/{scheduled_listing.id}/")
-    assert resp.status_code == 404
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "scheduled"
 
 
 @pytest.mark.django_db

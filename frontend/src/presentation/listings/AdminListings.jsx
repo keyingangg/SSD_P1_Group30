@@ -5,6 +5,7 @@ import AdminLayout from "../admin-layout/AdminLayout.jsx";
 import axiosClient from "../../api/axiosClient.js";
 import { deleteListing, getListings } from "../../api/auctions.js";
 import { useWebSocket } from "../../hooks/useWebSocket.js";
+import { useConfirm, useAlert } from "../../context/ConfirmContext.jsx";
 
 const TABS = ["All Lots", "Live", "Scheduled", "Ended", "Draft", "Cancelled"];
 
@@ -59,6 +60,8 @@ export default function AdminListings() {
   const [error, setError] = useState(null);
   const [tab, setTab] = useState("All Lots");
   const navigate = useNavigate();
+  const confirm = useConfirm();
+  const alertModal = useAlert();
 
   const { lastMessage, usingPoll } = useWebSocket("/ws/catalogue/");
 
@@ -86,22 +89,22 @@ export default function AdminListings() {
   }, [usingPoll, load]);
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Delete this listing? This cannot be undone.")) return;
+    if (!(await confirm("Delete this listing? This cannot be undone.", { danger: true, confirmLabel: "Delete" }))) return;
     try {
       await deleteListing(id);
       setListings(prev => prev.filter(l => l.id !== id));
     } catch (err) {
-      alert(err?.response?.data?.detail || "Could not delete listing.");
+      alertModal(err?.response?.data?.detail || "Could not delete listing.");
     }
   };
 
   const handleCancel = async (id) => {
-    if (!window.confirm("Cancel this auction? All bidders will be notified by email.")) return;
+    if (!(await confirm("Cancel this auction? All bidders will be notified by email."))) return;
     try {
       await axiosClient.post(`/auctions/${id}/cancel/`);
       setListings(prev => prev.map(l => l.id === id ? { ...l, status: "cancelled" } : l));
     } catch (err) {
-      alert(err?.response?.data?.detail || "Could not cancel auction.");
+      alertModal(err?.response?.data?.detail || "Could not cancel auction.");
     }
   };
 

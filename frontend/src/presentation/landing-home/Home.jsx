@@ -59,6 +59,8 @@ const SIDEBAR_GROUPS = {
   },
 };
 
+const STATUS_ORDER = { active: 0, scheduled: 1, ended: 2, cancelled: 3, draft: 4 };
+
 const ITEMS_PER_PAGE = 9;
 
 export default function Home() {
@@ -116,7 +118,7 @@ export default function Home() {
     }
 
     return true;
-  });
+  }).sort((a, b) => STATUS_ORDER[runtimeStatus(a)] - STATUS_ORDER[runtimeStatus(b)]);
 
   const totalPages = Math.max(1, Math.ceil(visible.length / ITEMS_PER_PAGE));
   const paged = visible.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
@@ -156,12 +158,6 @@ export default function Home() {
                 onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               />
             </div>
-            <select className="cat-sort">
-              <option>Ending soonest</option>
-              <option>Highest bid</option>
-              <option>Lowest estimate</option>
-              <option>Most bids</option>
-            </select>
           </div>
         </div>
       </div>
