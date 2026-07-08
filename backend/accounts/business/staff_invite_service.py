@@ -1,6 +1,6 @@
 """Staff Invite Service — invite creation and acceptance (diagram: biz_invite)."""
 from .emails import send_invite_email
-from .tokens import consume_token, generate_staff_invite_token, validate_token
+from .tokens import generate_staff_invite_token, validate_token
 from ..data.models import StaffInviteToken
 
 
@@ -33,7 +33,7 @@ def accept_staff_invite(token_string, display_name, password):
     Returns the activated user, or None if the token is invalid/expired.
     """
     record = validate_token(token_string, StaffInviteToken)
-    if record is None or not consume_token(record):
+    if record is None:
         return None
 
     user = record.user
@@ -44,4 +44,7 @@ def accept_staff_invite(token_string, display_name, password):
     user.save(
         update_fields=["display_name", "password", "is_active", "is_email_verified"]
     )
+
+    record.is_used = True
+    record.save(update_fields=["is_used"])
     return user

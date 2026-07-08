@@ -1,9 +1,7 @@
 """Session Manager — login-session lifecycle helpers (diagram: biz_session)."""
 import logging
 import time
-from importlib import import_module
 
-from django.conf import settings
 from django.contrib.sessions.models import Session
 from django.utils import timezone
 
@@ -31,23 +29,14 @@ def get_client_ip(request):
 
 
 def invalidate_all_user_sessions(user):
-    """Delete all active sessions belonging to this user.
-
-    Goes through the configured session backend's SessionStore.delete()
-    (not Session.delete() on the model directly) so that under
-    SESSION_ENGINE=cached_db the per-process cache entry is evicted too --
-    a raw model delete only removes the DB row, leaving any worker that
-    already cached this session free to keep treating it as valid for up to
-    SESSION_COOKIE_AGE.
-    """
-    session_store_cls = import_module(settings.SESSION_ENGINE).SessionStore
+    """Delete all active sessions belonging to this user."""
     active_sessions = Session.objects.filter(expire_date__gte=timezone.now())
 
     for session in active_sessions:
         data = session.get_decoded()
 
         if str(user.id) == str(data.get("_auth_user_id")):
-            session_store_cls(session_key=session.session_key).delete()
+            session.delete()
 
 
 def notify_new_device_or_location(request, user):
