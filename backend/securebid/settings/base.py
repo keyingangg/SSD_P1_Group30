@@ -167,6 +167,10 @@ DATABASES = {
         'OPTIONS': {
             'sslmode': 'require',
         },
+        # Reuse the TLS connection to Supabase across requests within a
+        # worker instead of paying a fresh TCP+TLS handshake on every
+        # request (the default CONN_MAX_AGE=0 closes it each time).
+        'CONN_MAX_AGE': int(os.environ.get('DB_CONN_MAX_AGE', 60)),
     }
 }
 
