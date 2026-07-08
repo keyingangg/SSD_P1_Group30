@@ -3,7 +3,6 @@ import uuid
 
 from django.conf import settings
 from django.db import models
-from django.db.models import Q
 from django.utils import timezone
 
 
@@ -211,9 +210,15 @@ class Listing(models.Model):
         """Finalize all auctions that reached end time and still need winner/status sync."""
         now = now or timezone.now()
 
-        ended_candidates = cls.objects.exclude(status__in={"draft", "cancelled"}).filter(
-            ends_at__lte=now
-        ).filter(Q(status__in={"active", "scheduled"}) | Q(winner__isnull=True))
+        # Only "active"/"scheduled" listings are unfinalized -- once a listing
+        # is "ended" it's terminal, even with winner=None (an auction that
+        # closed with zero bids has no winner and never will). Previously this
+        # also matched Q(winner__isnull=True), which kept re-selecting every
+        # winnerless "ended" listing on every request forever, turning this
+        # into an unbounded per-request query loop as such listings piled up.
+        ended_candidates = cls.objects.filter(
+            status__in={"active", "scheduled"}, ends_at__lte=now
+        )
 
         for listing in ended_candidates:
             listing.finalize_if_ended(now=now)
