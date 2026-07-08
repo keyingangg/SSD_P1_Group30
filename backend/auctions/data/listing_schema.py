@@ -3,6 +3,7 @@ import uuid
 
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 
 
@@ -210,15 +211,26 @@ class Listing(models.Model):
         """Finalize all auctions that reached end time and still need winner/status sync."""
         now = now or timezone.now()
 
-        # Only "active"/"scheduled" listings are unfinalized -- once a listing
-        # is "ended" it's terminal, even with winner=None (an auction that
-        # closed with zero bids has no winner and never will). Previously this
-        # also matched Q(winner__isnull=True), which kept re-selecting every
-        # winnerless "ended" listing on every request forever, turning this
-        # into an unbounded per-request query loop as such listings piled up.
+        # Normally "active"/"scheduled" listings are the only unfinalized ones
+        # -- once a listing is "ended" it's terminal, even with winner=None
+        # (an auction that closed with zero bids has no winner and never
+        # will). We don't also match plain Q(winner__isnull=True), which
+        # would keep re-selecting every winnerless "ended" listing on every
+        # request forever, turning this into an unbounded per-request query
+        # loop as such listings piled up.
+        #
+        # One edge case still needs to be covered here: save() eagerly flips
+        # status straight to "ended" as soon as ends_at is in the past (see
+        # save() above), which can happen before any bids exist (e.g. right
+        # after Listing.objects.create()). If bids land afterwards, the
+        # listing is already "ended" with winner=None and would otherwise
+        # never be revisited. So also match "ended" listings that have bids
+        # but no winner yet -- once a winner is assigned this no longer
+        # matches, so it can't loop forever the way the removed clause did.
         ended_candidates = cls.objects.filter(
-            status__in={"active", "scheduled"}, ends_at__lte=now
-        )
+            Q(status__in={"active", "scheduled"}, ends_at__lte=now)
+            | Q(status="ended", winner__isnull=True, bids__isnull=False)
+        ).distinct()
 
         for listing in ended_candidates:
             listing.finalize_if_ended(now=now)

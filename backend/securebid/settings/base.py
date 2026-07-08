@@ -214,6 +214,14 @@ CHANNEL_LAYERS = {
 # Sessions & cookies
 # --------------------------------------------------------------------------
 
+# Read sessions from the (default, per-process) cache and only fall through to
+# the DB on a cache miss, while still persisting every write to the DB table
+# for durability/multi-worker consistency. The plain "db" engine (Django's
+# default) round-trips to Supabase to load the session on every request; with
+# SESSION_SAVE_EVERY_REQUEST below also writing on every request, that was two
+# remote DB round-trips added to nearly every authenticated request.
+SESSION_ENGINE = "django.contrib.sessions.backends.cached_db"
+
 # Expire session after 30 minutes of inactivity.
 SESSION_COOKIE_AGE =  30 * 60
 SESSION_SAVE_EVERY_REQUEST = True
