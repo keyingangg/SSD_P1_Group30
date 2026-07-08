@@ -3,6 +3,7 @@ import logging
 from decimal import Decimal
 
 from django.conf import settings
+from django.db import transaction
 
 from core.cross_cutting.audit import log_action
 from core.cross_cutting.storage import get_signed_url
@@ -236,7 +237,8 @@ class OrderService:
         Returns True if the order was already confirmed (no-op), False if this
         call marked it paid.
         """
-        # Idempotent — already confirmed by webhook or a prior call.
+        # Fast-path check before touching Stripe -- not itself a guard against
+        # the race (the authoritative check is under the row lock below).
         if order.fulfillment_status != "pending_payment":
             return True
 
@@ -278,25 +280,34 @@ class OrderService:
                 )
                 raise OrderServiceError("Payment does not match this order.", status_code=400)
 
-        order.fulfillment_status = "paid"
-        if not intent.get("demo"):
-            order.stripe_payment_intent_id = payment_intent_id
-        order.save(update_fields=["fulfillment_status", "stripe_payment_intent_id", "updated_at"])
+        # Idempotent — lock the row and re-check, since a webhook or a
+        # concurrent call to this same endpoint (e.g. a double-click, or a
+        # retry) may have already marked the order paid while we were talking
+        # to Stripe above.
+        with transaction.atomic():
+            locked_order = Order.objects.select_for_update().get(pk=order.pk)
+            if locked_order.fulfillment_status != "pending_payment":
+                return True
 
-        log_action(
-            user=user,
-            action="ORDER_PAID",
-            resource_type="Order",
-            resource_id=order.id,
-            ip_address=client_ip,
-            user_agent=user_agent,
-            metadata={
-                "payment_intent": payment_intent_id,
-                "source": "direct_confirm",
-                "session_id": session_key,
-                "listing_id": str(order.winning_bid.listing_id),
-            },
-        )
+            locked_order.fulfillment_status = "paid"
+            if not intent.get("demo"):
+                locked_order.stripe_payment_intent_id = payment_intent_id
+            locked_order.save(update_fields=["fulfillment_status", "stripe_payment_intent_id", "updated_at"])
+
+            log_action(
+                user=user,
+                action="ORDER_PAID",
+                resource_type="Order",
+                resource_id=order.id,
+                ip_address=client_ip,
+                user_agent=user_agent,
+                metadata={
+                    "payment_intent": payment_intent_id,
+                    "source": "direct_confirm",
+                    "session_id": session_key,
+                    "listing_id": str(order.winning_bid.listing_id),
+                },
+            )
         logger.info("Order %s paid via direct confirm (pi=%s)", order.id, payment_intent_id)
         return False
 
@@ -345,9 +356,16 @@ class OrderService:
             )
             return
 
-        if order.fulfillment_status == "pending_payment":
-            order.fulfillment_status = "paid"
-            order.save(update_fields=["fulfillment_status", "updated_at"])
+        # Idempotent — lock the row and re-check, since ConfirmPaymentView may
+        # have already marked this order paid (or Stripe may redeliver the
+        # same webhook event).
+        with transaction.atomic():
+            locked_order = Order.objects.select_for_update().get(pk=order.pk)
+            if locked_order.fulfillment_status != "pending_payment":
+                return
+
+            locked_order.fulfillment_status = "paid"
+            locked_order.save(update_fields=["fulfillment_status", "updated_at"])
             log_action(
                 user=order.winner,
                 action="ORDER_PAID",

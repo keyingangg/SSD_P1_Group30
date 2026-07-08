@@ -88,3 +88,16 @@ def validate_token(token_string, token_model):
             return record
 
     return None
+
+
+def consume_token(record):
+    """Atomically mark a token record used-once.
+
+    Returns True if this call is the one that consumed it, False if another
+    concurrent request already had (a plain `record.is_used = True;
+    record.save()` after validate_token() would let two simultaneous requests
+    for the same token both pass the is_used=False check before either write
+    lands, letting the "one-time" token be used twice).
+    """
+    updated = type(record).objects.filter(pk=record.pk, is_used=False).update(is_used=True)
+    return updated == 1

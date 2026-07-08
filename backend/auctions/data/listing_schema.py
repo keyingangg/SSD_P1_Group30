@@ -219,14 +219,18 @@ class Listing(models.Model):
         # request forever, turning this into an unbounded per-request query
         # loop as such listings piled up.
         #
-        # One edge case still needs to be covered here: save() eagerly flips
-        # status straight to "ended" as soon as ends_at is in the past (see
-        # save() above), which can happen before any bids exist (e.g. right
-        # after Listing.objects.create()). If bids land afterwards, the
-        # listing is already "ended" with winner=None and would otherwise
-        # never be revisited. So also match "ended" listings that have bids
-        # but no winner yet -- once a winner is assigned this no longer
-        # matches, so it can't loop forever the way the removed clause did.
+        # The second clause below is a narrower, self-healing safety net: an
+        # "ended" listing that has bids but no winner. Bids placed through
+        # submit_bid() can't actually produce this state -- it rejects
+        # anything whose get_runtime_status() isn't "active", and since
+        # ends_at never changes, once a listing's runtime status is "ended"
+        # it stays "ended" forever, so submit_bid() can never attach a bid to
+        # it afterwards. But bids aren't guaranteed to only ever come from
+        # submit_bid() (e.g. a future bidding path, a data migration, or a
+        # manual DB fix), so if one ever does land on an already-"ended",
+        # winnerless listing, this reselects it once to backfill the winner.
+        # It can't loop forever like the plain winner__isnull=True clause
+        # would: once a winner is assigned this stops matching.
         ended_candidates = cls.objects.filter(
             Q(status__in={"active", "scheduled"}, ends_at__lte=now)
             | Q(status="ended", winner__isnull=True, bids__isnull=False)

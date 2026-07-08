@@ -12,7 +12,7 @@ from core.cross_cutting.audit import log_action, device_fingerprint as _device_f
 
 from ..business.emails import send_verification_email
 from ..business.session_manager import get_client_ip, normalise_auth_response_timing
-from ..business.tokens import generate_email_verification_token, validate_token
+from ..business.tokens import consume_token, generate_email_verification_token, validate_token
 from ..data.models import EmailVerificationToken
 from .serializers import UserRegistrationSerializer
 
@@ -113,7 +113,7 @@ class VerifyEmailView(APIView):
     def post(self, request):
         token = request.data.get("token") or request.query_params.get("token")
         record = validate_token(token, EmailVerificationToken)
-        if record is None:
+        if record is None or not consume_token(record):
             return Response(
                 {"detail": "This verification link is invalid or has expired."},
                 status=400,
@@ -139,9 +139,6 @@ class VerifyEmailView(APIView):
             endpoint_path=request.path,
             metadata={"email": user.email},
         )
-
-        record.is_used = True
-        record.save(update_fields=["is_used"])
 
         return Response(
             {"detail": "Your email has been verified. You can now sign in."},

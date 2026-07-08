@@ -227,6 +227,34 @@ def test_password_reset_confirm_expired_token_returns_400(verified_user, client)
     assert resp.status_code == 400
 
 
+@pytest.mark.django_db
+def test_password_reset_token_cannot_be_consumed_twice(verified_user):
+    """A one-time token must reject a second concurrent redemption.
+
+    Regression test: validate_token() used to return the same record to
+    every caller as long as is_used was still False at read time, and each
+    view separately did `record.is_used = True; record.save()` afterwards --
+    two simultaneous requests for the same token could both pass that check
+    before either write landed, redeeming the "one-time" token twice.
+    consume_token() replaces that with a single atomic conditional UPDATE.
+    """
+    from accounts.business.tokens import consume_token, validate_token
+
+    raw_token = generate_password_reset_token(verified_user)
+
+    # Simulate two concurrent requests both having already read the record
+    # via validate_token() before either attempts to consume it.
+    record_a = validate_token(raw_token, PasswordResetToken)
+    record_b = validate_token(raw_token, PasswordResetToken)
+    assert record_a is not None and record_b is not None
+
+    first = consume_token(record_a)
+    second = consume_token(record_b)
+
+    assert first is True
+    assert second is False
+
+
 # ---------------------------------------------------------------------------
 # Staff invite
 # ---------------------------------------------------------------------------

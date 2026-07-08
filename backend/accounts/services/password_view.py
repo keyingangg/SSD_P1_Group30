@@ -18,7 +18,7 @@ from ..business.session_manager import (
     invalidate_all_user_sessions,
     normalise_auth_response_timing,
 )
-from ..business.tokens import generate_password_reset_token, validate_token
+from ..business.tokens import consume_token, generate_password_reset_token, validate_token
 from ..data.models import AccountLockoutProfile, PasswordResetToken
 from .permissions import IsEmailVerified
 from .serializers import PasswordResetConfirmSerializer, PasswordResetRequestSerializer
@@ -97,7 +97,7 @@ class PasswordResetConfirmView(APIView):
         password = serializer.validated_data["password"]
 
         record = validate_token(token_string, PasswordResetToken)
-        if record is None:
+        if record is None or not consume_token(record):
             return Response(
                 {
                     "detail": "This reset link is invalid or has expired. "
@@ -109,9 +109,6 @@ class PasswordResetConfirmView(APIView):
         user = record.user
         user.set_password(password)
         user.save(update_fields=["password"])
-
-        record.is_used = True
-        record.save(update_fields=["is_used"])
 
         # Reset custom escalating lockout profile only after successful password reset.
         AccountLockoutProfile.objects.update_or_create(

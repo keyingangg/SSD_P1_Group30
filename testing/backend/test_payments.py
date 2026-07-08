@@ -252,6 +252,75 @@ def test_confirm_payment_is_idempotent(auth_client, verified_user):
     assert "already confirmed" in resp.json()["detail"]
 
 
+@pytest.mark.django_db(transaction=True)
+def test_confirm_payment_is_race_safe_under_concurrent_calls(verified_user):
+    """Two concurrent confirms for the same order must not both mark it paid.
+
+    Regression test: confirm_payment used to check-then-write
+    fulfillment_status without any row lock, so two requests racing (e.g. a
+    double-click, or ConfirmPaymentView racing the Stripe webhook) could both
+    read "pending_payment" before either write landed, marking the order paid
+    twice and double-logging ORDER_PAID.
+    """
+    import threading
+    import time
+    from django.db import connection
+    from payments.business.order_service import OrderService
+
+    order = _make_order(verified_user)
+    fake_intent = {
+        "id": "pi_race",
+        "status": "succeeded",
+        "metadata": {"order_id": str(order.id)},
+        "demo": False,
+    }
+
+    def slow_retrieve(*_args, **_kwargs):
+        # Widen the window between the pre-Stripe check and the final
+        # check-then-write so both threads are reliably mid-flight together
+        # regardless of thread-scheduling jitter.
+        time.sleep(0.2)
+        return fake_intent
+
+    results = []
+    errors = []
+    barrier = threading.Barrier(2)
+
+    def worker():
+        try:
+            barrier.wait(timeout=5)
+            with patch(
+                "payments.business.stripe_client.retrieve_payment_intent",
+                side_effect=slow_retrieve,
+            ):
+                local_order = Order.objects.get(pk=order.pk)
+                already_confirmed = OrderService.confirm_payment(
+                    local_order,
+                    verified_user,
+                    "pi_race",
+                    client_ip="127.0.0.1",
+                    user_agent="test",
+                    session_key=None,
+                )
+            results.append(already_confirmed)
+        except Exception as exc:  # pragma: no cover - surfaced via assertion below
+            errors.append(exc)
+        finally:
+            connection.close()
+
+    threads = [threading.Thread(target=worker) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=10)
+
+    assert not errors, errors
+    assert sorted(results) == [False, True]
+    order.refresh_from_db()
+    assert order.fulfillment_status == "paid"
+    assert AuditLog.objects.filter(action="ORDER_PAID", resource_id=order.id).count() == 1
+
+
 @pytest.mark.django_db
 def test_confirm_payment_rejects_mismatched_payment_intent(auth_client, verified_user):
     """The retrieved PaymentIntent's order_id metadata must match this order."""
